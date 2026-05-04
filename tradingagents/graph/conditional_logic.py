@@ -43,6 +43,30 @@ class ConditionalLogic:
             return "tools_fundamentals"
         return "Msg Clear Fundamentals"
 
+    def should_continue_current_news(self, state: AgentState):
+        """Determine if the current-news scout should continue using tools."""
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_current_news"
+        return "Msg Clear Current News"
+
+    def should_continue_strategy(self, state: AgentState):
+        """Determine if the strategy researcher should continue using tools."""
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_strategy"
+        return "Msg Clear Strategy"
+
+    def should_continue_copy_trading(self, state: AgentState):
+        """Determine if the copy-trading researcher should continue using tools."""
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_copy_trading"
+        return "Msg Clear Copy Trading"
+
     def should_continue_debate(self, state: AgentState) -> str:
         """Determine if debate should continue."""
 

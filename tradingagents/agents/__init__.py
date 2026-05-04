@@ -8,6 +8,12 @@ from .analysts.social_media_analyst import create_social_media_analyst
 
 from .researchers.bear_researcher import create_bear_researcher
 from .researchers.bull_researcher import create_bull_researcher
+from .research_department import (
+    create_copy_trading_researcher,
+    create_current_news_scout,
+    create_research_director,
+    create_strategy_researcher,
+)
 
 from .risk_mgmt.aggressive_debator import create_aggressive_debator
 from .risk_mgmt.conservative_debator import create_conservative_debator
@@ -23,9 +29,13 @@ __all__ = [
     "create_msg_delete",
     "InvestDebateState",
     "RiskDebateState",
+    "create_copy_trading_researcher",
+    "create_current_news_scout",
     "create_bear_researcher",
     "create_bull_researcher",
+    "create_research_director",
     "create_research_manager",
+    "create_strategy_researcher",
     "create_fundamentals_analyst",
     "create_market_analyst",
     "create_neutral_debator",

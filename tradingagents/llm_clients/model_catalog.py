@@ -102,6 +102,18 @@ MODEL_OPTIONS: ProviderModeOptions = {
         ],
     },
     # OpenRouter: fetched dynamically. Azure: any deployed model name.
+    "groq": {
+        "quick": [
+            ("Groq GPT-OSS 20B - Very fast free-tier friendly", "openai/gpt-oss-20b"),
+            ("Groq Llama 3.1 8B Instant - Fastest lightweight option", "llama-3.1-8b-instant"),
+            ("Groq Qwen3 32B - Strong reasoning/tool-use balance", "qwen/qwen3-32b"),
+        ],
+        "deep": [
+            ("Groq GPT-OSS 120B - Strong open-weight reasoning", "openai/gpt-oss-120b"),
+            ("Groq Llama 3.3 70B Versatile - General research quality", "llama-3.3-70b-versatile"),
+            ("Groq Qwen3 32B - Efficient deep research", "qwen/qwen3-32b"),
+        ],
+    },
     "ollama": {
         "quick": [
             ("Qwen3:latest (8B, local)", "qwen3:latest"),

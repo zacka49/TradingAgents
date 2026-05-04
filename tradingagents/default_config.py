@@ -11,6 +11,17 @@ DEFAULT_CONFIG = {
     # the oldest resolved entries are pruned once this limit is exceeded.
     # Pending entries are never pruned. None disables rotation entirely.
     "memory_log_max_entries": None,
+    # Persist comprehensive per-run artifacts (state, decision, reports) under
+    # results_dir/<ticker>/<trade_date>/<run_id>/.
+    "save_run_artifacts": True,
+    # Optional: execute paper orders from final team decisions.
+    "auto_submit_paper_orders": False,
+    "paper_order_quantity": 1.0,
+    # CEO risk policy defaults (paper-trading safety rails)
+    "enforce_market_open": True,
+    "max_position_notional_usd": 1000.0,
+    "max_order_notional_usd": 250.0,
+    "allowed_symbols": [],  # empty => allow all symbols
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "gpt-5.4",
@@ -31,6 +42,9 @@ DEFAULT_CONFIG = {
     # Output language for analyst reports and final decision
     # Internal agent debate stays in English for reasoning quality
     "output_language": "English",
+    # AI research department: runs after core analysts and before the
+    # bull/bear debate, adding current-news, strategy, and copy-trading memos.
+    "research_department_enabled": True,
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,

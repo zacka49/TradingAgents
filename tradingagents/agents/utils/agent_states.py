@@ -57,6 +57,12 @@ class AgentState(MessagesState):
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
 
+    # AI research department step
+    current_news_report: Annotated[str, "Report from the Current News Scout"]
+    strategy_report: Annotated[str, "Report from the Strategy Researcher"]
+    copy_trading_report: Annotated[str, "Report from the Copy Trading Researcher"]
+    research_department_report: Annotated[str, "Combined AI research department brief"]
+
     # researcher team discussion step
     investment_debate_state: Annotated[
         InvestDebateState, "Current state of the debate on if to invest or not"

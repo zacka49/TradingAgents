@@ -14,6 +14,11 @@ logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
 
 from tradingagents.llm_clients import create_llm_client
+from tradingagents.execution import (
+    AlpacaPaperBroker,
+    decision_to_order_intent,
+    evaluate_order_policy,
+)
 
 from tradingagents.agents import *
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -37,6 +42,11 @@ from tradingagents.agents.utils.agent_utils import (
     get_news,
     get_insider_transactions,
     get_global_news
+)
+from tradingagents.agents.utils.copy_trading_tools import (
+    get_congressional_trades,
+    get_institutional_holders,
+    get_sec_disclosure_filings,
 )
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -114,6 +124,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            self.config,
         )
 
         self.propagator = Propagator()
@@ -124,6 +135,7 @@ class TradingAgentsGraph:
         self.curr_state = None
         self.ticker = None
         self.log_states_dict = {}  # date to full state dict
+        self.last_run_artifact_dir: Optional[Path] = None
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         self.workflow = self.graph_setup.setup_graph(selected_analysts)
@@ -184,6 +196,27 @@ class TradingAgentsGraph:
                     get_balance_sheet,
                     get_cashflow,
                     get_income_statement,
+                ]
+            ),
+            "current_news": ToolNode(
+                [
+                    get_news,
+                    get_global_news,
+                ]
+            ),
+            "strategy": ToolNode(
+                [
+                    get_stock_data,
+                    get_indicators,
+                    get_news,
+                ]
+            ),
+            "copy_trading": ToolNode(
+                [
+                    get_congressional_trades,
+                    get_institutional_holders,
+                    get_sec_disclosure_filings,
+                    get_insider_transactions,
                 ]
             ),
         }
@@ -330,7 +363,21 @@ class TradingAgentsGraph:
         self.curr_state = final_state
 
         # Log state to disk.
-        self._log_state(trade_date, final_state)
+        logged_state = self._log_state(trade_date, final_state)
+        signal = self.process_signal(final_state["final_trade_decision"])
+        if self.config.get("save_run_artifacts", True):
+            self._save_run_artifacts(
+                trade_date=trade_date,
+                final_state=final_state,
+                logged_state=logged_state,
+                signal=signal,
+            )
+
+        if self.config.get("auto_submit_paper_orders", False):
+            self._maybe_submit_paper_order(
+                ticker=company_name,
+                final_trade_decision=final_state["final_trade_decision"],
+            )
 
         # Store decision for deferred reflection on the next same-ticker run.
         self.memory_log.store_decision(
@@ -345,17 +392,21 @@ class TradingAgentsGraph:
                 self.config["data_cache_dir"], company_name, str(trade_date)
             )
 
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, signal
 
-    def _log_state(self, trade_date, final_state):
-        """Log the final state to a JSON file."""
-        self.log_states_dict[str(trade_date)] = {
+    def _build_logged_state(self, final_state):
+        """Build a JSON-serializable state view used for logs and artifacts."""
+        return {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],
             "fundamentals_report": final_state["fundamentals_report"],
+            "current_news_report": final_state.get("current_news_report", ""),
+            "strategy_report": final_state.get("strategy_report", ""),
+            "copy_trading_report": final_state.get("copy_trading_report", ""),
+            "research_department_report": final_state.get("research_department_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],
@@ -379,6 +430,11 @@ class TradingAgentsGraph:
             "final_trade_decision": final_state["final_trade_decision"],
         }
 
+    def _log_state(self, trade_date, final_state):
+        """Log the final state to a JSON file."""
+        logged_state = self._build_logged_state(final_state)
+        self.log_states_dict[str(trade_date)] = logged_state
+
         # Save to file. Reject ticker values that would escape the
         # results directory when joined as a path component.
         safe_ticker = safe_ticker_component(self.ticker)
@@ -387,7 +443,157 @@ class TradingAgentsGraph:
 
         log_path = directory / f"full_states_log_{trade_date}.json"
         with open(log_path, "w", encoding="utf-8") as f:
-            json.dump(self.log_states_dict[str(trade_date)], f, indent=4)
+            json.dump(logged_state, f, indent=4)
+
+        return logged_state
+
+    def _save_run_artifacts(self, trade_date, final_state, logged_state, signal):
+        """Save a complete per-run artifact bundle for reproducibility."""
+        safe_ticker = safe_ticker_component(self.ticker)
+        timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        run_dir = (
+            Path(self.config["results_dir"])
+            / safe_ticker
+            / str(trade_date)
+            / f"run_{timestamp}"
+        )
+        run_dir.mkdir(parents=True, exist_ok=True)
+        self.last_run_artifact_dir = run_dir
+
+        (run_dir / "final_state.json").write_text(
+            json.dumps(logged_state, indent=2),
+            encoding="utf-8",
+        )
+        (run_dir / "final_decision.md").write_text(
+            final_state["final_trade_decision"],
+            encoding="utf-8",
+        )
+        (run_dir / "signal.txt").write_text(f"{signal}\n", encoding="utf-8")
+
+        metadata = {
+            "ticker": self.ticker,
+            "trade_date": str(trade_date),
+            "run_timestamp_utc": timestamp,
+            "llm_provider": self.config.get("llm_provider"),
+            "quick_think_llm": self.config.get("quick_think_llm"),
+            "deep_think_llm": self.config.get("deep_think_llm"),
+            "max_debate_rounds": self.config.get("max_debate_rounds"),
+            "max_risk_discuss_rounds": self.config.get("max_risk_discuss_rounds"),
+            "checkpoint_enabled": bool(self.config.get("checkpoint_enabled")),
+            "signal": signal,
+        }
+        (run_dir / "metadata.json").write_text(
+            json.dumps(metadata, indent=2),
+            encoding="utf-8",
+        )
+
+        reports_dir = run_dir / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        report_map = {
+            "market_report.md": final_state.get("market_report", ""),
+            "sentiment_report.md": final_state.get("sentiment_report", ""),
+            "news_report.md": final_state.get("news_report", ""),
+            "fundamentals_report.md": final_state.get("fundamentals_report", ""),
+            "current_news_report.md": final_state.get("current_news_report", ""),
+            "strategy_report.md": final_state.get("strategy_report", ""),
+            "copy_trading_report.md": final_state.get("copy_trading_report", ""),
+            "research_department_report.md": final_state.get("research_department_report", ""),
+            "investment_plan.md": final_state.get("investment_plan", ""),
+            "trader_investment_plan.md": final_state.get("trader_investment_plan", ""),
+            "final_trade_decision.md": final_state.get("final_trade_decision", ""),
+        }
+        for filename, content in report_map.items():
+            if content:
+                (reports_dir / filename).write_text(content, encoding="utf-8")
+
+        board_lines = [
+            f"Ticker: {self.ticker}",
+            f"Trade Date: {trade_date}",
+            f"Signal: {signal}",
+            f"Provider: {self.config.get('llm_provider')}",
+            f"Quick LLM: {self.config.get('quick_think_llm')}",
+            f"Deep LLM: {self.config.get('deep_think_llm')}",
+            "",
+            "Final Decision:",
+            final_state.get("final_trade_decision", ""),
+        ]
+        (run_dir / "board_summary.md").write_text(
+            "\n".join(board_lines),
+            encoding="utf-8",
+        )
+
+    def _maybe_submit_paper_order(self, ticker: str, final_trade_decision: str) -> None:
+        """Map final decision to order intent and optionally submit to Alpaca paper."""
+        intent = decision_to_order_intent(
+            ticker=ticker,
+            final_trade_decision=final_trade_decision,
+            base_quantity=float(self.config.get("paper_order_quantity", 1.0)),
+        )
+        if intent is None:
+            logger.info("No paper order submitted (Hold decision).")
+            if self.last_run_artifact_dir:
+                (self.last_run_artifact_dir / "paper_order_result.json").write_text(
+                    json.dumps({"submitted": False, "reason": "hold_decision"}, indent=2),
+                    encoding="utf-8",
+                )
+            return
+
+        broker = AlpacaPaperBroker()
+        account = broker.get_account()
+        clock = broker.get_clock()
+        latest_trade = broker.get_latest_trade(ticker)
+        latest_price = latest_trade.get("p")
+
+        policy = evaluate_order_policy(
+            intent=intent,
+            account=account,
+            market_open=bool(clock.get("is_open")),
+            latest_price=float(latest_price) if latest_price is not None else None,
+            config=self.config,
+        )
+        if not policy.allow:
+            logger.info("Paper order blocked by policy: %s", policy.reason)
+            if self.last_run_artifact_dir:
+                (self.last_run_artifact_dir / "paper_order_result.json").write_text(
+                    json.dumps(
+                        {
+                            "submitted": False,
+                            "reason": "policy_blocked",
+                            "policy_reason": policy.reason,
+                            "intent": intent.__dict__,
+                            "latest_trade": latest_trade,
+                            "market_open": clock.get("is_open"),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+            return
+
+        order = broker.submit_order(intent)
+        logger.info(
+            "Paper order submitted: id=%s status=%s symbol=%s side=%s qty=%s",
+            order.get("id"),
+            order.get("status"),
+            order.get("symbol"),
+            order.get("side"),
+            order.get("qty"),
+        )
+        if self.last_run_artifact_dir:
+            (self.last_run_artifact_dir / "paper_order_result.json").write_text(
+                json.dumps(
+                    {
+                        "submitted": True,
+                        "intent": intent.__dict__,
+                        "policy_reason": policy.reason,
+                        "order_notional_usd": policy.order_notional_usd,
+                        "latest_trade": latest_trade,
+                        "order": order,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
 
     def process_signal(self, full_signal):
         """Process a signal to extract the core decision."""

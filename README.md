@@ -83,6 +83,14 @@ Our framework decomposes complex trading tasks into specialized roles. This ensu
   <img src="assets/researcher.png" width="70%" style="display: inline-block; margin: 0 2%;">
 </p>
 
+### AI Research Department
+- Current News Scout: monitors fresh company, sector, macro, regulatory, and earnings-adjacent developments before debate.
+- Strategy Researcher: proposes testable trading strategies with triggers, confirmations, invalidation levels, and paper-test notes.
+- Copy Trading Researcher: reviews public politician trades, SEC disclosure filings, insider transactions, and large-holder snapshots.
+- Research Director: merges the specialist memos into a CEO-ready research brief that feeds the bull/bear debate, trader, risk analysts, and portfolio manager.
+
+See [docs/research_department.md](docs/research_department.md) for the recommended free/low-cost AI and data provider stack.
+
 ### Trader Agent
 - Composes reports from the analysts and researchers to make informed trading decisions. It determines the timing and magnitude of trades based on comprehensive market insights.
 
@@ -145,7 +153,9 @@ export DEEPSEEK_API_KEY=...        # DeepSeek
 export DASHSCOPE_API_KEY=...       # Qwen (Alibaba DashScope)
 export ZHIPU_API_KEY=...           # GLM (Zhipu)
 export OPENROUTER_API_KEY=...      # OpenRouter
+export GROQ_API_KEY=...            # Groq (OpenAI-compatible)
 export ALPHA_VANTAGE_API_KEY=...   # Alpha Vantage
+export SEC_USER_AGENT="YourApp your@email.com"  # SEC EDGAR copy-trading tool
 ```
 
 For enterprise providers (e.g. Azure OpenAI, AWS Bedrock), copy `.env.enterprise.example` to `.env.enterprise` and fill in your credentials.
@@ -184,7 +194,7 @@ An interface will appear showing results as they load, letting you track the age
 
 ### Implementation Details
 
-We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports multiple LLM providers: OpenAI, Google, Anthropic, xAI, DeepSeek, Qwen (Alibaba DashScope), GLM (Zhipu), OpenRouter, Ollama for local models, and Azure OpenAI for enterprise.
+We built TradingAgents with LangGraph to ensure flexibility and modularity. The framework supports multiple LLM providers: OpenAI, Google, Anthropic, xAI, DeepSeek, Qwen (Alibaba DashScope), GLM (Zhipu), OpenRouter, Groq, Ollama for local models, and Azure OpenAI for enterprise.
 
 ### Python Usage
 
@@ -208,7 +218,7 @@ from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 
 config = DEFAULT_CONFIG.copy()
-config["llm_provider"] = "openai"        # openai, google, anthropic, xai, deepseek, qwen, glm, openrouter, ollama, azure
+config["llm_provider"] = "openai"        # openai, google, anthropic, xai, deepseek, qwen, glm, openrouter, groq, ollama, azure
 config["deep_think_llm"] = "gpt-5.4"     # Model for complex reasoning
 config["quick_think_llm"] = "gpt-5.4-mini" # Model for quick tasks
 config["max_debate_rounds"] = 2

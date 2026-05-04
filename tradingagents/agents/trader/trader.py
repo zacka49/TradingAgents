@@ -21,6 +21,7 @@ def create_trader(llm):
         company_name = state["company_of_interest"]
         instrument_context = build_instrument_context(company_name)
         investment_plan = state["investment_plan"]
+        research_department_report = state.get("research_department_report", "")
 
         messages = [
             {
@@ -40,6 +41,7 @@ def create_trader(llm):
                     f"social media sentiment. Use this plan as a foundation for evaluating your next "
                     f"trading decision.\n\nProposed Investment Plan: {investment_plan}\n\n"
                     f"Leverage these insights to make an informed and strategic decision."
+                    f"\n\nAI Research Department Brief: {research_department_report}"
                 ),
             },
         ]

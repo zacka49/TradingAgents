@@ -19,12 +19,14 @@ class GraphSetup:
         deep_thinking_llm: Any,
         tool_nodes: Dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
+        config: Dict[str, Any] | None = None,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
+        self.config = config or {}
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -75,6 +77,26 @@ class GraphSetup:
             tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
 
         # Create researcher and manager nodes
+        research_department_enabled = self.config.get("research_department_enabled", True)
+        if research_department_enabled:
+            current_news_scout_node = create_current_news_scout(
+                self.quick_thinking_llm
+            )
+            strategy_researcher_node = create_strategy_researcher(
+                self.quick_thinking_llm
+            )
+            copy_trading_researcher_node = create_copy_trading_researcher(
+                self.quick_thinking_llm
+            )
+            research_director_node = create_research_director(
+                self.deep_thinking_llm
+            )
+            research_department_delete_nodes = {
+                "current_news": create_msg_delete(),
+                "strategy": create_msg_delete(),
+                "copy_trading": create_msg_delete(),
+            }
+
         bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
         bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
         research_manager_node = create_research_manager(self.deep_thinking_llm)
@@ -96,6 +118,27 @@ class GraphSetup:
                 f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
             )
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
+
+        if research_department_enabled:
+            workflow.add_node("Current News Scout", current_news_scout_node)
+            workflow.add_node("Strategy Researcher", strategy_researcher_node)
+            workflow.add_node("Copy Trading Researcher", copy_trading_researcher_node)
+            workflow.add_node("Research Director", research_director_node)
+            workflow.add_node(
+                "Msg Clear Current News",
+                research_department_delete_nodes["current_news"],
+            )
+            workflow.add_node(
+                "Msg Clear Strategy",
+                research_department_delete_nodes["strategy"],
+            )
+            workflow.add_node(
+                "Msg Clear Copy Trading",
+                research_department_delete_nodes["copy_trading"],
+            )
+            workflow.add_node("tools_current_news", self.tool_nodes["current_news"])
+            workflow.add_node("tools_strategy", self.tool_nodes["strategy"])
+            workflow.add_node("tools_copy_trading", self.tool_nodes["copy_trading"])
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -130,10 +173,38 @@ class GraphSetup:
             if i < len(selected_analysts) - 1:
                 next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
                 workflow.add_edge(current_clear, next_analyst)
+            elif research_department_enabled:
+                workflow.add_edge(current_clear, "Current News Scout")
             else:
                 workflow.add_edge(current_clear, "Bull Researcher")
 
         # Add remaining edges
+        if research_department_enabled:
+            workflow.add_conditional_edges(
+                "Current News Scout",
+                self.conditional_logic.should_continue_current_news,
+                ["tools_current_news", "Msg Clear Current News"],
+            )
+            workflow.add_edge("tools_current_news", "Current News Scout")
+            workflow.add_edge("Msg Clear Current News", "Strategy Researcher")
+
+            workflow.add_conditional_edges(
+                "Strategy Researcher",
+                self.conditional_logic.should_continue_strategy,
+                ["tools_strategy", "Msg Clear Strategy"],
+            )
+            workflow.add_edge("tools_strategy", "Strategy Researcher")
+            workflow.add_edge("Msg Clear Strategy", "Copy Trading Researcher")
+
+            workflow.add_conditional_edges(
+                "Copy Trading Researcher",
+                self.conditional_logic.should_continue_copy_trading,
+                ["tools_copy_trading", "Msg Clear Copy Trading"],
+            )
+            workflow.add_edge("tools_copy_trading", "Copy Trading Researcher")
+            workflow.add_edge("Msg Clear Copy Trading", "Research Director")
+            workflow.add_edge("Research Director", "Bull Researcher")
+
         workflow.add_conditional_edges(
             "Bull Researcher",
             self.conditional_logic.should_continue_debate,

@@ -13,7 +13,7 @@ VALID_MODELS = {
 def validate_model(provider: str, model: str) -> bool:
     """Check if model name is valid for the given provider.
 
-    For ollama, openrouter - any model is accepted.
+    For ollama and openrouter, any model is accepted.
     """
     provider_lower = provider.lower()
 

@@ -44,6 +44,12 @@ app = typer.Typer(
 class MessageBuffer:
     # Fixed teams that always run (not user-selectable)
     FIXED_AGENTS = {
+        "Research Department": [
+            "Current News Scout",
+            "Strategy Researcher",
+            "Copy Trading Researcher",
+            "Research Director",
+        ],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
@@ -66,6 +72,10 @@ class MessageBuffer:
         "sentiment_report": ("social", "Social Analyst"),
         "news_report": ("news", "News Analyst"),
         "fundamentals_report": ("fundamentals", "Fundamentals Analyst"),
+        "current_news_report": (None, "Current News Scout"),
+        "strategy_report": (None, "Strategy Researcher"),
+        "copy_trading_report": (None, "Copy Trading Researcher"),
+        "research_department_report": (None, "Research Director"),
         "investment_plan": (None, "Research Manager"),
         "trader_investment_plan": (None, "Trader"),
         "final_trade_decision": (None, "Portfolio Manager"),
@@ -174,6 +184,10 @@ class MessageBuffer:
                 "sentiment_report": "Social Sentiment",
                 "news_report": "News Analysis",
                 "fundamentals_report": "Fundamentals Analysis",
+                "current_news_report": "Current News Scout",
+                "strategy_report": "Strategy Research",
+                "copy_trading_report": "Copy Trading Research",
+                "research_department_report": "Research Department Brief",
                 "investment_plan": "Research Team Decision",
                 "trader_investment_plan": "Trading Team Plan",
                 "final_trade_decision": "Portfolio Management Decision",
@@ -207,6 +221,31 @@ class MessageBuffer:
             if self.report_sections.get("fundamentals_report"):
                 report_parts.append(
                     f"### Fundamentals Analysis\n{self.report_sections['fundamentals_report']}"
+                )
+
+        department_sections = [
+            "current_news_report",
+            "strategy_report",
+            "copy_trading_report",
+            "research_department_report",
+        ]
+        if any(self.report_sections.get(section) for section in department_sections):
+            report_parts.append("## AI Research Department")
+            if self.report_sections.get("current_news_report"):
+                report_parts.append(
+                    f"### Current News Scout\n{self.report_sections['current_news_report']}"
+                )
+            if self.report_sections.get("strategy_report"):
+                report_parts.append(
+                    f"### Strategy Researcher\n{self.report_sections['strategy_report']}"
+                )
+            if self.report_sections.get("copy_trading_report"):
+                report_parts.append(
+                    f"### Copy Trading Researcher\n{self.report_sections['copy_trading_report']}"
+                )
+            if self.report_sections.get("research_department_report"):
+                report_parts.append(
+                    f"### Research Director\n{self.report_sections['research_department_report']}"
                 )
 
         # Research Team Reports
@@ -287,6 +326,12 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
             "Social Analyst",
             "News Analyst",
             "Fundamentals Analyst",
+        ],
+        "Research Department": [
+            "Current News Scout",
+            "Strategy Researcher",
+            "Copy Trading Researcher",
+            "Research Director",
         ],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
         "Trading Team": ["Trader"],
@@ -664,9 +709,32 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
         content = "\n\n".join(f"### {name}\n{text}" for name, text in analyst_parts)
         sections.append(f"## I. Analyst Team Reports\n\n{content}")
 
-    # 2. Research
+    # 2. AI Research Department
+    department_dir = save_path / "2_research_department"
+    department_parts = []
+    if final_state.get("current_news_report"):
+        department_dir.mkdir(exist_ok=True)
+        (department_dir / "current_news.md").write_text(final_state["current_news_report"], encoding="utf-8")
+        department_parts.append(("Current News Scout", final_state["current_news_report"]))
+    if final_state.get("strategy_report"):
+        department_dir.mkdir(exist_ok=True)
+        (department_dir / "strategy.md").write_text(final_state["strategy_report"], encoding="utf-8")
+        department_parts.append(("Strategy Researcher", final_state["strategy_report"]))
+    if final_state.get("copy_trading_report"):
+        department_dir.mkdir(exist_ok=True)
+        (department_dir / "copy_trading.md").write_text(final_state["copy_trading_report"], encoding="utf-8")
+        department_parts.append(("Copy Trading Researcher", final_state["copy_trading_report"]))
+    if final_state.get("research_department_report"):
+        department_dir.mkdir(exist_ok=True)
+        (department_dir / "director.md").write_text(final_state["research_department_report"], encoding="utf-8")
+        department_parts.append(("Research Director", final_state["research_department_report"]))
+    if department_parts:
+        content = "\n\n".join(f"### {name}\n{text}" for name, text in department_parts)
+        sections.append(f"## II. AI Research Department\n\n{content}")
+
+    # 3. Research
     if final_state.get("investment_debate_state"):
-        research_dir = save_path / "2_research"
+        research_dir = save_path / "3_research"
         debate = final_state["investment_debate_state"]
         research_parts = []
         if debate.get("bull_history"):
@@ -683,18 +751,18 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
             research_parts.append(("Research Manager", debate["judge_decision"]))
         if research_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in research_parts)
-            sections.append(f"## II. Research Team Decision\n\n{content}")
+            sections.append(f"## III. Research Team Decision\n\n{content}")
 
-    # 3. Trading
+    # 4. Trading
     if final_state.get("trader_investment_plan"):
-        trading_dir = save_path / "3_trading"
+        trading_dir = save_path / "4_trading"
         trading_dir.mkdir(exist_ok=True)
         (trading_dir / "trader.md").write_text(final_state["trader_investment_plan"], encoding="utf-8")
-        sections.append(f"## III. Trading Team Plan\n\n### Trader\n{final_state['trader_investment_plan']}")
+        sections.append(f"## IV. Trading Team Plan\n\n### Trader\n{final_state['trader_investment_plan']}")
 
-    # 4. Risk Management
+    # 5. Risk Management
     if final_state.get("risk_debate_state"):
-        risk_dir = save_path / "4_risk"
+        risk_dir = save_path / "5_risk"
         risk = final_state["risk_debate_state"]
         risk_parts = []
         if risk.get("aggressive_history"):
@@ -711,14 +779,14 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
             risk_parts.append(("Neutral Analyst", risk["neutral_history"]))
         if risk_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in risk_parts)
-            sections.append(f"## IV. Risk Management Team Decision\n\n{content}")
+            sections.append(f"## V. Risk Management Team Decision\n\n{content}")
 
-        # 5. Portfolio Manager
+        # 6. Portfolio Manager
         if risk.get("judge_decision"):
-            portfolio_dir = save_path / "5_portfolio"
+            portfolio_dir = save_path / "6_portfolio"
             portfolio_dir.mkdir(exist_ok=True)
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
-            sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
+            sections.append(f"## VI. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
     # Write consolidated report
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -746,7 +814,22 @@ def display_complete_report(final_state):
         for title, content in analysts:
             console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-    # II. Research Team Reports
+    # II. AI Research Department
+    department = []
+    if final_state.get("current_news_report"):
+        department.append(("Current News Scout", final_state["current_news_report"]))
+    if final_state.get("strategy_report"):
+        department.append(("Strategy Researcher", final_state["strategy_report"]))
+    if final_state.get("copy_trading_report"):
+        department.append(("Copy Trading Researcher", final_state["copy_trading_report"]))
+    if final_state.get("research_department_report"):
+        department.append(("Research Director", final_state["research_department_report"]))
+    if department:
+        console.print(Panel("[bold]II. AI Research Department[/bold]", border_style="magenta"))
+        for title, content in department:
+            console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
+
+    # III. Research Team Reports
     if final_state.get("investment_debate_state"):
         debate = final_state["investment_debate_state"]
         research = []
@@ -757,16 +840,16 @@ def display_complete_report(final_state):
         if debate.get("judge_decision"):
             research.append(("Research Manager", debate["judge_decision"]))
         if research:
-            console.print(Panel("[bold]II. Research Team Decision[/bold]", border_style="magenta"))
+            console.print(Panel("[bold]III. Research Team Decision[/bold]", border_style="magenta"))
             for title, content in research:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-    # III. Trading Team
+    # IV. Trading Team
     if final_state.get("trader_investment_plan"):
-        console.print(Panel("[bold]III. Trading Team Plan[/bold]", border_style="yellow"))
+        console.print(Panel("[bold]IV. Trading Team Plan[/bold]", border_style="yellow"))
         console.print(Panel(Markdown(final_state["trader_investment_plan"]), title="Trader", border_style="blue", padding=(1, 2)))
 
-    # IV. Risk Management Team
+    # V. Risk Management Team
     if final_state.get("risk_debate_state"):
         risk = final_state["risk_debate_state"]
         risk_reports = []
@@ -777,13 +860,13 @@ def display_complete_report(final_state):
         if risk.get("neutral_history"):
             risk_reports.append(("Neutral Analyst", risk["neutral_history"]))
         if risk_reports:
-            console.print(Panel("[bold]IV. Risk Management Team Decision[/bold]", border_style="red"))
+            console.print(Panel("[bold]V. Risk Management Team Decision[/bold]", border_style="red"))
             for title, content in risk_reports:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-        # V. Portfolio Manager Decision
+        # VI. Portfolio Manager Decision
         if risk.get("judge_decision"):
-            console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
+            console.print(Panel("[bold]VI. Portfolio Manager Decision[/bold]", border_style="green"))
             console.print(Panel(Markdown(risk["judge_decision"]), title="Portfolio Manager", border_style="blue", padding=(1, 2)))
 
 
@@ -792,6 +875,41 @@ def update_research_team_status(status):
     research_team = ["Bull Researcher", "Bear Researcher", "Research Manager"]
     for agent in research_team:
         message_buffer.update_agent_status(agent, status)
+
+
+def update_research_department_statuses(message_buffer, chunk):
+    """Update statuses and reports for the AI research department."""
+    analyst_reports_done = all(
+        bool(message_buffer.report_sections.get(ANALYST_REPORT_MAP[analyst_key]))
+        for analyst_key in message_buffer.selected_analysts
+    )
+    if not analyst_reports_done:
+        return
+
+    department_flow = [
+        ("current_news_report", "Current News Scout"),
+        ("strategy_report", "Strategy Researcher"),
+        ("copy_trading_report", "Copy Trading Researcher"),
+        ("research_department_report", "Research Director"),
+    ]
+
+    found_active = False
+    for report_key, agent_name in department_flow:
+        if chunk.get(report_key):
+            message_buffer.update_report_section(report_key, chunk[report_key])
+
+        has_report = bool(message_buffer.report_sections.get(report_key))
+        if has_report:
+            message_buffer.update_agent_status(agent_name, "completed")
+        elif not found_active:
+            message_buffer.update_agent_status(agent_name, "in_progress")
+            found_active = True
+        else:
+            message_buffer.update_agent_status(agent_name, "pending")
+
+    if not found_active:
+        if message_buffer.agent_status.get("Bull Researcher") == "pending":
+            message_buffer.update_agent_status("Bull Researcher", "in_progress")
 
 
 # Ordered list of analysts for status transitions
@@ -846,10 +964,10 @@ def update_analyst_statuses(message_buffer, chunk):
         else:
             message_buffer.update_agent_status(agent_name, "pending")
 
-    # When all analysts complete, transition research team to in_progress
+    # When all analysts complete, transition research department to in_progress
     if not found_active and selected:
-        if message_buffer.agent_status.get("Bull Researcher") == "pending":
-            message_buffer.update_agent_status("Bull Researcher", "in_progress")
+        if message_buffer.agent_status.get("Current News Scout") == "pending":
+            message_buffer.update_agent_status("Current News Scout", "in_progress")
 
 def extract_content_string(content):
     """Extract string content from various message formats.
@@ -1075,6 +1193,7 @@ def run_analysis(checkpoint: bool = False):
 
             # Update analyst statuses based on report state (runs on every chunk)
             update_analyst_statuses(message_buffer, chunk)
+            update_research_department_statuses(message_buffer, chunk)
 
             # Research Team - Handle Investment Debate State
             if chunk.get("investment_debate_state"):
