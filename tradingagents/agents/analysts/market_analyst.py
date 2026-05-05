@@ -1,8 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
+    build_training_context,
     get_indicators,
     get_language_instruction,
+    get_live_order_flow_snapshot,
     get_stock_data,
 )
 from tradingagents.dataflows.config import get_config
@@ -18,6 +20,7 @@ def create_market_analyst(llm):
         tools = [
             get_stock_data,
             get_indicators,
+            get_live_order_flow_snapshot,
         ]
 
         system_message = (
@@ -45,7 +48,10 @@ Volatility Indicators:
 Volume-Based Indicators:
 - vwma: VWMA: A moving average weighted by volume. Usage: Confirm trends by integrating price action with volume data. Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses.
 
-- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_stock_data first to retrieve the CSV that is needed to generate indicators. Then use get_indicators with the specific indicator names. Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
+Live Order Flow:
+- get_live_order_flow_snapshot: Recent trade prints, top-of-book quote, volume-at-price profile, delta, large prints, absorption flags, and whether true L2 heatmap data is available. Usage: Check intraday timing, liquidity, spread/slippage, support/resistance by actual traded volume, and whether aggressive buying/selling is being absorbed.
+
+- Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_stock_data first to retrieve the CSV that is needed to generate indicators. Then use get_indicators with the specific indicator names. If live credentials are configured, call get_live_order_flow_snapshot for intraday order-flow context; if it is unavailable, mention the limitation and continue with OHLCV indicators. Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + get_language_instruction()
         )
@@ -63,7 +69,7 @@ Volume-Based Indicators:
                     " You have access to the following tools: {tool_names}.\n{system_message}"
                     "For your reference, the current date is {current_date}. "
                     "{instrument_context}\n\nPre-market stock discovery brief:\n"
-                    "{stock_discovery_report}",
+                    "{stock_discovery_report}{training_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -74,6 +80,7 @@ Volume-Based Indicators:
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
         prompt = prompt.partial(stock_discovery_report=stock_discovery_report)
+        prompt = prompt.partial(training_context=build_training_context(state))
 
         chain = prompt | llm.bind_tools(tools)
 

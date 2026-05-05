@@ -8,6 +8,12 @@ from tradingagents.agents.research_department.research_director import (
 from tradingagents.agents.business_departments.chief_investment_officer import (
     create_chief_investment_officer,
 )
+from tradingagents.agents.business_departments.training_development_coach import (
+    create_training_development_coach,
+)
+from tradingagents.agents.research_department.opportunity_scout import (
+    _extract_primary_ticker,
+)
 from tradingagents.agents.utils.market_scanner_tools import (
     get_discovery_market_snapshot,
 )
@@ -22,10 +28,19 @@ from tradingagents.graph.propagation import Propagator
 
 
 @pytest.mark.unit
+def test_opportunity_scout_extracts_primary_ticker_safely():
+    report = "Primary ticker to analyze next: nvda\n"
+
+    assert _extract_primary_ticker(report) == "NVDA"
+
+
+@pytest.mark.unit
 def test_initial_state_includes_research_department_slots():
     state = Propagator().create_initial_state("NVDA", "2026-01-15")
 
+    assert state["opportunity_scout_report"] == ""
     assert state["stock_discovery_report"] == ""
+    assert state["training_context"] == ""
     assert state["current_news_report"] == ""
     assert state["strategy_report"] == ""
     assert state["copy_trading_report"] == ""
@@ -37,6 +52,7 @@ def test_initial_state_includes_research_department_slots():
     assert state["portfolio_office_report"] == ""
     assert state["operations_compliance_report"] == ""
     assert state["evaluation_report"] == ""
+    assert state["training_development_report"] == ""
 
 
 @pytest.mark.unit
@@ -48,6 +64,7 @@ def test_research_director_synthesizes_specialist_reports():
     result = director(
         {
             "company_of_interest": "NVDA",
+            "opportunity_scout_report": "Automated opportunity list",
             "stock_discovery_report": "Ten-stock watchlist",
             "current_news_report": "News catalyst",
             "strategy_report": "Breakout strategy",
@@ -61,6 +78,7 @@ def test_research_director_synthesizes_specialist_reports():
     )
 
     prompt = llm.invoke.call_args.args[0]
+    assert "Automated opportunity list" in prompt
     assert "Ten-stock watchlist" in prompt
     assert "News catalyst" in prompt
     assert "Breakout strategy" in prompt
@@ -105,6 +123,36 @@ def test_chief_investment_officer_uses_research_plan_and_department_brief():
     assert "Director brief" in prompt
     assert "Research manager plan" in prompt
     assert result["investment_committee_report"] == "Committee memo"
+
+
+@pytest.mark.unit
+def test_training_development_coach_creates_role_specific_training_memo():
+    llm = MagicMock()
+    llm.invoke.return_value = MagicMock(content="Training memo")
+    coach = create_training_development_coach(llm)
+
+    result = coach(
+        {
+            "company_of_interest": "NVDA",
+            "opportunity_scout_report": "Opportunity route",
+            "market_report": "Market order-flow report",
+            "news_report": "News catalyst",
+            "fundamentals_report": "Fundamentals",
+            "research_department_report": "Director brief",
+            "trader_investment_plan": "Trader plan",
+            "risk_office_report": "Risk memo",
+            "portfolio_office_report": "Portfolio memo",
+            "operations_compliance_report": "Compliance memo",
+            "evaluation_report": "Evaluation learning note",
+        }
+    )
+
+    prompt = llm.invoke.call_args.args[0]
+    assert "AI Training and Development Department" in prompt
+    assert "Opportunity route" in prompt
+    assert "Market order-flow report" in prompt
+    assert "Agent, Skill to Train, Drill, Success Metric" in prompt
+    assert result["training_development_report"] == "Training memo"
 
 
 @pytest.mark.unit

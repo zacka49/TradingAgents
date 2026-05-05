@@ -298,3 +298,58 @@ class TradingMemoryLog:
         text = e["decision"][:300]
         suffix = "..." if len(e["decision"]) > 300 else ""
         return f"{tag}\n{text}{suffix}"
+
+
+class TrainingMemoryLog:
+    """Append-only markdown log of agent training memos."""
+
+    _SEPARATOR = "\n\n<!-- TRAINING_ENTRY_END -->\n\n"
+
+    def __init__(self, config: dict = None):
+        cfg = config or {}
+        self._log_path = None
+        path = cfg.get("training_memory_log_path")
+        if path:
+            self._log_path = Path(path).expanduser()
+            self._log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._max_entries = cfg.get("training_memory_max_entries", 10)
+
+    def store_training_report(
+        self,
+        *,
+        ticker: str,
+        trade_date: str,
+        training_report: str,
+    ) -> None:
+        if not self._log_path or not training_report.strip():
+            return
+        tag = f"[{trade_date} | {ticker} | training]"
+        entry = f"{tag}\n\n{training_report.strip()}{self._SEPARATOR}"
+        with open(self._log_path, "a", encoding="utf-8") as f:
+            f.write(entry)
+        self._apply_rotation()
+
+    def get_training_context(self, n: int = 3) -> str:
+        if not self._log_path or not self._log_path.exists():
+            return ""
+        text = self._log_path.read_text(encoding="utf-8")
+        entries = [entry.strip() for entry in text.split(self._SEPARATOR) if entry.strip()]
+        if not entries:
+            return ""
+        recent = entries[-max(1, n):]
+        return "Recent AI Training and Development lessons:\n\n" + "\n\n".join(recent)
+
+    def _apply_rotation(self) -> None:
+        if not self._log_path or not self._log_path.exists():
+            return
+        if not self._max_entries or self._max_entries <= 0:
+            return
+        text = self._log_path.read_text(encoding="utf-8")
+        entries = [entry for entry in text.split(self._SEPARATOR) if entry.strip()]
+        if len(entries) <= self._max_entries:
+            return
+        kept = entries[-self._max_entries:]
+        self._log_path.write_text(
+            self._SEPARATOR.join(kept) + self._SEPARATOR,
+            encoding="utf-8",
+        )

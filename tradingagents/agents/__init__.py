@@ -12,6 +12,7 @@ from .research_department import (
     create_copy_trading_researcher,
     create_current_news_scout,
     create_github_researcher,
+    create_opportunity_scout,
     create_research_director,
     create_stock_discovery_researcher,
     create_strategy_researcher,
@@ -22,6 +23,7 @@ from .business_departments import (
     create_operations_compliance_auditor,
     create_portfolio_office_allocator,
     create_risk_office_guardian,
+    create_training_development_coach,
     create_trading_desk_strategist,
 )
 
@@ -43,6 +45,7 @@ __all__ = [
     "create_copy_trading_researcher",
     "create_current_news_scout",
     "create_github_researcher",
+    "create_opportunity_scout",
     "create_evaluation_analyst",
     "create_operations_compliance_auditor",
     "create_portfolio_office_allocator",
@@ -51,6 +54,7 @@ __all__ = [
     "create_research_director",
     "create_research_manager",
     "create_risk_office_guardian",
+    "create_training_development_coach",
     "create_stock_discovery_researcher",
     "create_strategy_researcher",
     "create_fundamentals_analyst",

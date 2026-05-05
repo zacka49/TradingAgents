@@ -19,6 +19,14 @@ class ConditionalLogic:
             return "tools_stock_discovery"
         return "Msg Clear Stock Discovery"
 
+    def should_continue_opportunity_scout(self, state: AgentState):
+        """Determine if automated opportunity scouting should continue using tools."""
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_opportunity_scout"
+        return "Msg Clear Opportunity Scout"
+
     def should_continue_market(self, state: AgentState):
         """Determine if market analysis should continue."""
         messages = state["messages"]

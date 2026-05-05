@@ -14,6 +14,8 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
+from tradingagents.dataflows.order_flow import build_order_flow_features
+
 
 def _headers() -> dict[str, str]:
     key = os.getenv("APCA_API_KEY_ID")
@@ -101,6 +103,17 @@ def _check_latest_trade_quote(symbol: str, headers: dict[str, str]) -> None:
         "Alpaca latest quote",
         f"{symbol} bid={quote.get('bp')} ask={quote.get('ap')} time={quote.get('t')}",
     )
+
+    if trade:
+        snapshot = build_order_flow_features(symbol, [trade], quote)
+        _print_ok(
+            "Derived order flow",
+            (
+                f"poc={snapshot.get('point_of_control')} "
+                f"spread={snapshot.get('latest_quote', {}).get('spread')} "
+                f"l2_heatmap_available={snapshot.get('l2_heatmap_available')}"
+            ),
+        )
 
 
 def _check_news(symbol: str, headers: dict[str, str]) -> None:

@@ -47,7 +47,14 @@ class GraphSetup:
         analyst_nodes = {}
         delete_nodes = {}
         tool_nodes = {}
+        opportunity_scout_enabled = self.config.get("opportunity_scout_enabled", True)
         stock_discovery_enabled = self.config.get("stock_discovery_enabled", True)
+
+        if opportunity_scout_enabled:
+            opportunity_scout_node = create_opportunity_scout(
+                self.quick_thinking_llm
+            )
+            opportunity_scout_delete_node = create_msg_delete()
 
         if stock_discovery_enabled:
             stock_discovery_node = create_stock_discovery_researcher(
@@ -116,6 +123,10 @@ class GraphSetup:
         trader_node = create_trader(self.quick_thinking_llm)
 
         business_departments_enabled = self.config.get("business_departments_enabled", True)
+        training_development_enabled = (
+            business_departments_enabled
+            and self.config.get("training_development_enabled", True)
+        )
         if business_departments_enabled:
             chief_investment_officer_node = create_chief_investment_officer(
                 self.deep_thinking_llm
@@ -135,6 +146,10 @@ class GraphSetup:
             evaluation_node = create_evaluation_analyst(
                 self.quick_thinking_llm
             )
+            if training_development_enabled:
+                training_development_node = create_training_development_coach(
+                    self.quick_thinking_llm
+                )
 
         # Create risk analysis nodes
         aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
@@ -144,6 +159,14 @@ class GraphSetup:
 
         # Create workflow
         workflow = StateGraph(AgentState)
+
+        if opportunity_scout_enabled:
+            workflow.add_node("Opportunity Scout", opportunity_scout_node)
+            workflow.add_node("Msg Clear Opportunity Scout", opportunity_scout_delete_node)
+            workflow.add_node(
+                "tools_opportunity_scout",
+                self.tool_nodes["opportunity_scout"],
+            )
 
         if stock_discovery_enabled:
             workflow.add_node("Stock Discovery Researcher", stock_discovery_node)
@@ -199,6 +222,8 @@ class GraphSetup:
             workflow.add_node("Portfolio Office Allocator", portfolio_office_node)
             workflow.add_node("Operations Compliance Auditor", operations_compliance_node)
             workflow.add_node("Evaluation Analyst", evaluation_node)
+            if training_development_enabled:
+                workflow.add_node("Training Development Coach", training_development_node)
         workflow.add_node("Trader", trader_node)
         workflow.add_node("Aggressive Analyst", aggressive_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
@@ -209,8 +234,24 @@ class GraphSetup:
         first_analyst = selected_analysts[0]
         first_analyst_node = f"{first_analyst.capitalize()} Analyst"
 
-        if stock_discovery_enabled:
+        if opportunity_scout_enabled:
+            workflow.add_edge(START, "Opportunity Scout")
+            workflow.add_conditional_edges(
+                "Opportunity Scout",
+                self.conditional_logic.should_continue_opportunity_scout,
+                ["tools_opportunity_scout", "Msg Clear Opportunity Scout"],
+            )
+            workflow.add_edge("tools_opportunity_scout", "Opportunity Scout")
+            if stock_discovery_enabled:
+                workflow.add_edge("Msg Clear Opportunity Scout", "Stock Discovery Researcher")
+            else:
+                workflow.add_edge("Msg Clear Opportunity Scout", first_analyst_node)
+        elif stock_discovery_enabled:
             workflow.add_edge(START, "Stock Discovery Researcher")
+        else:
+            workflow.add_edge(START, first_analyst_node)
+
+        if stock_discovery_enabled:
             workflow.add_conditional_edges(
                 "Stock Discovery Researcher",
                 self.conditional_logic.should_continue_stock_discovery,
@@ -218,8 +259,6 @@ class GraphSetup:
             )
             workflow.add_edge("tools_stock_discovery", "Stock Discovery Researcher")
             workflow.add_edge("Msg Clear Stock Discovery", first_analyst_node)
-        else:
-            workflow.add_edge(START, first_analyst_node)
 
         # Connect analysts in sequence
         for i, analyst_type in enumerate(selected_analysts):
@@ -335,7 +374,11 @@ class GraphSetup:
             workflow.add_edge("Portfolio Manager", "Portfolio Office Allocator")
             workflow.add_edge("Portfolio Office Allocator", "Operations Compliance Auditor")
             workflow.add_edge("Operations Compliance Auditor", "Evaluation Analyst")
-            workflow.add_edge("Evaluation Analyst", END)
+            if training_development_enabled:
+                workflow.add_edge("Evaluation Analyst", "Training Development Coach")
+                workflow.add_edge("Training Development Coach", END)
+            else:
+                workflow.add_edge("Evaluation Analyst", END)
         else:
             workflow.add_edge("Portfolio Manager", END)
 

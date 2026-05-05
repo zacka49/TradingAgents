@@ -22,7 +22,7 @@ from tradingagents.execution import (
 
 from tradingagents.agents import *
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.agents.utils.memory import TradingMemoryLog
+from tradingagents.agents.utils.memory import TradingMemoryLog, TrainingMemoryLog
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.agents.utils.agent_states import (
     AgentState,
@@ -43,10 +43,16 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions,
     get_global_news
 )
+from tradingagents.agents.utils.order_flow_tools import (
+    get_live_order_flow_snapshot,
+)
 from tradingagents.agents.utils.copy_trading_tools import (
     get_congressional_trades,
     get_institutional_holders,
     get_sec_disclosure_filings,
+)
+from tradingagents.agents.utils.autonomous_discovery_tools import (
+    get_autonomous_stock_selection,
 )
 from tradingagents.agents.utils.market_scanner_tools import (
     get_discovery_market_snapshot,
@@ -116,6 +122,7 @@ class TradingAgentsGraph:
         self.quick_thinking_llm = quick_client.get_llm()
         
         self.memory_log = TradingMemoryLog(self.config)
+        self.training_memory_log = TrainingMemoryLog(self.config)
 
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
@@ -173,12 +180,20 @@ class TradingAgentsGraph:
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
         return {
+            "opportunity_scout": ToolNode(
+                [
+                    get_autonomous_stock_selection,
+                    get_global_news,
+                ]
+            ),
             "market": ToolNode(
                 [
                     # Core stock data tools
                     get_stock_data,
                     # Technical indicators
                     get_indicators,
+                    # Live order-flow context
+                    get_live_order_flow_snapshot,
                 ]
             ),
             "stock_discovery": ToolNode(
@@ -220,6 +235,7 @@ class TradingAgentsGraph:
                 [
                     get_stock_data,
                     get_indicators,
+                    get_live_order_flow_snapshot,
                     get_news,
                 ]
             ),
@@ -354,8 +370,14 @@ class TradingAgentsGraph:
         """Execute the graph and write the resulting state to disk and memory log."""
         # Initialize state — inject memory log context for PM.
         past_context = self.memory_log.get_past_context(company_name)
+        training_context = self.training_memory_log.get_training_context(
+            int(self.config.get("training_memory_context_entries", 3))
+        )
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, past_context=past_context
+            company_name,
+            trade_date,
+            past_context=past_context,
+            training_context=training_context,
         )
         args = self.propagator.get_graph_args()
 
@@ -402,6 +424,11 @@ class TradingAgentsGraph:
             trade_date=trade_date,
             final_trade_decision=final_state["final_trade_decision"],
         )
+        self.training_memory_log.store_training_report(
+            ticker=final_state.get("company_of_interest", company_name),
+            trade_date=str(trade_date),
+            training_report=final_state.get("training_development_report", ""),
+        )
 
         # Clear checkpoint on successful completion to avoid stale state.
         if self.config.get("checkpoint_enabled"):
@@ -416,6 +443,7 @@ class TradingAgentsGraph:
         return {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "opportunity_scout_report": final_state.get("opportunity_scout_report", ""),
             "stock_discovery_report": final_state.get("stock_discovery_report", ""),
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
@@ -432,6 +460,7 @@ class TradingAgentsGraph:
             "portfolio_office_report": final_state.get("portfolio_office_report", ""),
             "operations_compliance_report": final_state.get("operations_compliance_report", ""),
             "evaluation_report": final_state.get("evaluation_report", ""),
+            "training_development_report": final_state.get("training_development_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],
@@ -515,6 +544,7 @@ class TradingAgentsGraph:
         reports_dir = run_dir / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         report_map = {
+            "opportunity_scout_report.md": final_state.get("opportunity_scout_report", ""),
             "market_report.md": final_state.get("market_report", ""),
             "stock_discovery_report.md": final_state.get("stock_discovery_report", ""),
             "sentiment_report.md": final_state.get("sentiment_report", ""),
@@ -531,6 +561,7 @@ class TradingAgentsGraph:
             "portfolio_office_report.md": final_state.get("portfolio_office_report", ""),
             "operations_compliance_report.md": final_state.get("operations_compliance_report", ""),
             "evaluation_report.md": final_state.get("evaluation_report", ""),
+            "training_development_report.md": final_state.get("training_development_report", ""),
             "investment_plan.md": final_state.get("investment_plan", ""),
             "trader_investment_plan.md": final_state.get("trader_investment_plan", ""),
             "final_trade_decision.md": final_state.get("final_trade_decision", ""),

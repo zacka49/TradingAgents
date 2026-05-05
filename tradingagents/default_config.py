@@ -7,10 +7,13 @@ DEFAULT_CONFIG = {
     "results_dir": os.getenv("TRADINGAGENTS_RESULTS_DIR", os.path.join(_TRADINGAGENTS_HOME, "logs")),
     "data_cache_dir": os.getenv("TRADINGAGENTS_CACHE_DIR", os.path.join(_TRADINGAGENTS_HOME, "cache")),
     "memory_log_path": os.getenv("TRADINGAGENTS_MEMORY_LOG_PATH", os.path.join(_TRADINGAGENTS_HOME, "memory", "trading_memory.md")),
+    "training_memory_log_path": os.getenv("TRADINGAGENTS_TRAINING_MEMORY_LOG_PATH", os.path.join(_TRADINGAGENTS_HOME, "memory", "agent_training_memory.md")),
     # Optional cap on the number of resolved memory log entries. When set,
     # the oldest resolved entries are pruned once this limit is exceeded.
     # Pending entries are never pruned. None disables rotation entirely.
     "memory_log_max_entries": None,
+    "training_memory_max_entries": 10,
+    "training_memory_context_entries": 3,
     # Persist comprehensive per-run artifacts (state, decision, reports) under
     # results_dir/<ticker>/<trade_date>/<run_id>/.
     "save_run_artifacts": True,
@@ -48,11 +51,21 @@ DEFAULT_CONFIG = {
     "github_research_enabled": True,
     # Pre-market discovery runs before the core analyst team and suggests 10
     # stocks/ETFs the rest of the business should consider.
+    "opportunity_scout_enabled": True,
+    "opportunity_scout_updates_focus_ticker": True,
     "stock_discovery_enabled": True,
+    "autonomous_discovery_universe": [],
+    "autonomous_discovery_max_universe": 45,
+    "autonomous_discovery_history_period": "90d",
+    "autonomous_discovery_enrichment_limit": 12,
+    "autonomous_discovery_order_flow_limit": 3,
+    "autonomous_discovery_min_price": 5.0,
+    "autonomous_discovery_min_avg_volume": 1_000_000,
     # Expanded AI business departments around the core trading flow:
     # Investment Committee, Trading Desk, Risk Office, Portfolio Office,
     # Operations/Compliance, and Evaluation.
     "business_departments_enabled": True,
+    "training_development_enabled": True,
     # Codex CEO mode: compute-light daily company workflow. Local Ollama can
     # provide one short staff memo, while Codex reviews the briefing pack in
     # this workspace before paper execution.
@@ -86,6 +99,13 @@ DEFAULT_CONFIG = {
     "day_trade_min_strategy_confidence": 0.58,
     "use_bracket_orders": True,
     "refresh_live_prices_before_submit": True,
+    # Live order-flow tooling uses Alpaca L1 trades/quotes by default. It
+    # derives volume profile, delta, large prints, and absorption flags; true
+    # L2/L3 heatmaps require an additional depth provider.
+    "order_flow_enabled": True,
+    "order_flow_provider": os.getenv("ORDER_FLOW_PROVIDER", "alpaca"),
+    "order_flow_lookback_minutes": 15,
+    "order_flow_large_trade_min_size": int(os.getenv("ORDER_FLOW_LARGE_TRADE_MIN_SIZE", "1000")),
     "backtest_lab_enabled": True,
     "backtest_lab_gate_targets": True,
     "backtest_lab_min_bars": 40,

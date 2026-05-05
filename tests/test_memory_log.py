@@ -4,7 +4,7 @@ import pytest
 import pandas as pd
 from unittest.mock import MagicMock, patch
 
-from tradingagents.agents.utils.memory import TradingMemoryLog
+from tradingagents.agents.utils.memory import TradingMemoryLog, TrainingMemoryLog
 from tradingagents.agents.schemas import PortfolioDecision, PortfolioRating
 from tradingagents.graph.reflection import Reflector
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -771,3 +771,34 @@ class TestLegacyRemoval:
         assert len(entries) == 1
         assert entries[0]["ticker"] == "NVDA"
         assert entries[0]["pending"] is True
+def test_training_memory_log_stores_and_returns_recent_context(tmp_path):
+    log_path = tmp_path / "training_memory.md"
+    memory = TrainingMemoryLog(
+        {
+            "training_memory_log_path": str(log_path),
+            "training_memory_max_entries": 2,
+        }
+    )
+
+    memory.store_training_report(
+        ticker="AAPL",
+        trade_date="2026-01-01",
+        training_report="Old lesson",
+    )
+    memory.store_training_report(
+        ticker="MSFT",
+        trade_date="2026-01-02",
+        training_report="Middle lesson",
+    )
+    memory.store_training_report(
+        ticker="NVDA",
+        trade_date="2026-01-03",
+        training_report="Newest lesson",
+    )
+
+    context = memory.get_training_context(n=3)
+
+    assert "Recent AI Training and Development lessons" in context
+    assert "Old lesson" not in context
+    assert "Middle lesson" in context
+    assert "Newest lesson" in context

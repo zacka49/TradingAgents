@@ -7,7 +7,10 @@ import functools
 from langchain_core.messages import AIMessage
 
 from tradingagents.agents.schemas import TraderProposal, render_trader_proposal
-from tradingagents.agents.utils.agent_utils import build_instrument_context
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    build_training_context,
+)
 from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
@@ -23,6 +26,7 @@ def create_trader(llm):
         investment_plan = state["investment_plan"]
         research_department_report = state.get("research_department_report", "")
         investment_committee_report = state.get("investment_committee_report", "")
+        training_context = build_training_context(state)
 
         messages = [
             {
@@ -44,6 +48,7 @@ def create_trader(llm):
                     f"Leverage these insights to make an informed and strategic decision."
                     f"\n\nAI Research Department Brief: {research_department_report}"
                     f"\n\nInvestment Committee Memo: {investment_committee_report}"
+                    f"{training_context}"
                 ),
             },
         ]

@@ -3,6 +3,7 @@ from .evaluation_analyst import create_evaluation_analyst
 from .operations_compliance_auditor import create_operations_compliance_auditor
 from .portfolio_office_allocator import create_portfolio_office_allocator
 from .risk_office_guardian import create_risk_office_guardian
+from .training_development_coach import create_training_development_coach
 from .trading_desk_strategist import create_trading_desk_strategist
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "create_operations_compliance_auditor",
     "create_portfolio_office_allocator",
     "create_risk_office_guardian",
+    "create_training_development_coach",
     "create_trading_desk_strategist",
 ]

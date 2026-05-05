@@ -1,6 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.utils.agent_utils import (
+    build_training_context,
     get_global_news,
     get_language_instruction,
 )
@@ -13,6 +14,7 @@ def create_stock_discovery_researcher(llm):
     def stock_discovery_node(state):
         current_date = state["trade_date"]
         focus_ticker = state["company_of_interest"]
+        opportunity_scout_report = state.get("opportunity_scout_report", "")
         tools = [get_discovery_market_snapshot, get_global_news]
 
         system_message = (
@@ -35,7 +37,9 @@ def create_stock_discovery_researcher(llm):
                     "Use the provided tools to progress toward the stock-discovery "
                     "deliverable. You have access to the following tools: {tool_names}.\n"
                     "{system_message}\nFor your reference, the current date is "
-                    "{current_date}. User supplied focus ticker: {focus_ticker}.",
+                    "{current_date}. User supplied focus ticker: {focus_ticker}.\n\n"
+                    "Automated opportunity scout brief:\n{opportunity_scout_report}"
+                    "{training_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -45,6 +49,8 @@ def create_stock_discovery_researcher(llm):
         prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(focus_ticker=focus_ticker)
+        prompt = prompt.partial(opportunity_scout_report=opportunity_scout_report)
+        prompt = prompt.partial(training_context=build_training_context(state))
 
         chain = prompt | llm.bind_tools(tools)
         result = chain.invoke(state["messages"])

@@ -1,18 +1,20 @@
 # AI Research Department
 
 This project now runs a full AI research department between the core analyst team and the bull/bear debate.
-The rest of the business is also expanded into downstream AI departments: Investment Committee, Trading Desk, Risk Office, Portfolio Office, Operations/Compliance, and Evaluation.
+The rest of the business is also expanded into downstream AI departments: Investment Committee, Trading Desk, Risk Office, Portfolio Office, Operations/Compliance, Evaluation, and Training/Development.
 
 ## Department Roles
 
 | Agent | Job | Main outputs |
 | --- | --- | --- |
+| Opportunity Scout | Runs first and automates what stocks/ETFs to investigate using OHLCV, relative strength, volume anomaly, volatility, fundamentals/news enrichment, and live order flow when available. | Ranked opportunities, primary ticker, backup tickers, per-ticker data plan, catalysts, risk flags, and data gaps. |
 | Stock Discovery Researcher | Runs before the market analyst and screens a liquid starter universe plus global news. | Exactly 10 stocks/ETFs for the rest of the business to consider, with catalyst, risk, owner team, and primary ticker line. |
 | Current News Scout | Finds recent company, sector, macro, regulatory, and earnings-adjacent developments. | Catalyst table with direction, urgency, confidence, and verification needs. |
 | Strategy Researcher | Converts market data and analyst reports into testable strategies. | Setup, trigger, confirmation, invalidation, sizing thought, and paper-test notes. |
 | Copy Trading Researcher | Reviews public politician trades, SEC disclosure filings, insider transactions, and holder snapshots. | Who moved, what changed, disclosure lag, and whether copying the flow improves or worsens risk. |
 | GitHub Researcher | Monitors popular financial AI, trading, data, agent, and backtesting repositories. | Repo lessons, adoption status, license caution, and next implementation step. |
 | Research Director | Synthesizes the specialist memos into a CEO-ready brief. | Highest-value signals, conflicts, limitations, and debate questions for bull/bear researchers. |
+| Training and Development Coach | Runs after Evaluation and upskills every active AI role based on the run outputs. | Role-specific lessons, drills, data/tool skills, improvement rubric, and next-run coaching instructions. |
 
 ## Recommended Free/Low-Cost AI Stack
 
@@ -40,9 +42,12 @@ Checked online on 2026-05-04.
 config["llm_provider"] = "google"
 config["quick_think_llm"] = "gemini-2.5-flash-lite"
 config["deep_think_llm"] = "gemini-2.5-flash"
+config["opportunity_scout_enabled"] = True
+config["opportunity_scout_updates_focus_ticker"] = True
 config["stock_discovery_enabled"] = True
 config["research_department_enabled"] = True
 config["github_research_enabled"] = True
+config["training_development_enabled"] = True
 ```
 
 For a no-cost fallback experiment:

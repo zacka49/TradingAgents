@@ -22,6 +22,9 @@ Your brief should:
 Current News Scout:
 {state.get("current_news_report", "")}
 
+Opportunity Scout:
+{state.get("opportunity_scout_report", "")}
+
 Stock Discovery Researcher:
 {state.get("stock_discovery_report", "")}
 

@@ -18,6 +18,12 @@ from tradingagents.agents.utils.news_data_tools import (
     get_insider_transactions,
     get_global_news
 )
+from tradingagents.agents.utils.autonomous_discovery_tools import (
+    get_autonomous_stock_selection,
+)
+from tradingagents.agents.utils.order_flow_tools import (
+    get_live_order_flow_snapshot,
+)
 
 
 def get_language_instruction() -> str:
@@ -40,6 +46,19 @@ def build_instrument_context(ticker: str) -> str:
         f"The instrument to analyze is `{ticker}`. "
         "Use this exact ticker in every tool call, report, and recommendation, "
         "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`)."
+    )
+
+
+def build_training_context(state) -> str:
+    """Return recent role-training lessons for prompt injection."""
+    context = state.get("training_context", "") if isinstance(state, dict) else ""
+    if not context:
+        return ""
+    return (
+        "\n\nAI Training and Development guidance from prior runs:\n"
+        f"{context}\n"
+        "Apply the lessons relevant to your specific role, but do not let them "
+        "override current evidence."
     )
 
 def create_msg_delete():

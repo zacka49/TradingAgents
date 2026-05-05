@@ -1,5 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction, get_news
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    build_training_context,
+    get_language_instruction,
+    get_news,
+)
 from tradingagents.dataflows.config import get_config
 
 
@@ -32,7 +37,7 @@ def create_social_media_analyst(llm):
                     " You have access to the following tools: {tool_names}.\n{system_message}"
                     "For your reference, the current date is {current_date}. "
                     "{instrument_context}\n\nPre-market stock discovery brief:\n"
-                    "{stock_discovery_report}",
+                    "{stock_discovery_report}{training_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -43,6 +48,7 @@ def create_social_media_analyst(llm):
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
         prompt = prompt.partial(stock_discovery_report=stock_discovery_report)
+        prompt = prompt.partial(training_context=build_training_context(state))
 
         chain = prompt | llm.bind_tools(tools)
 
