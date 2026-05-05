@@ -84,6 +84,21 @@ class AlpacaPaperBroker(PaperBroker):
         resp.raise_for_status()
         return resp.json()
 
+    def get_orders(self, status: str = "open") -> Dict[str, Any]:
+        resp = requests.get(
+            f"{self.base_url}/v2/orders",
+            headers=self._headers(),
+            params={
+                "status": status,
+                "limit": 500,
+                "direction": "desc",
+                "nested": "true",
+            },
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return {"orders": resp.json()}
+
     def get_clock(self) -> Dict[str, Any]:
         resp = requests.get(
             f"{self.base_url}/v2/clock",

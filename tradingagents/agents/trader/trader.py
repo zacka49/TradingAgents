@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 from tradingagents.agents.schemas import TraderProposal, render_trader_proposal
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_strategy_doctrine_context,
     build_training_context,
 )
 from tradingagents.agents.utils.structured import (
@@ -34,7 +35,10 @@ def create_trader(llm):
                 "content": (
                     "You are a trading agent analyzing market data to make investment decisions. "
                     "Based on your analysis, provide a specific recommendation to buy, sell, or hold. "
-                    "Anchor your reasoning in the analysts' reports and the research plan."
+                    "Anchor your reasoning in the analysts' reports and the research plan. "
+                    "Do not propose execution unless the trade has a named setup, trigger, "
+                    "confirmation, invalidation, and sizing logic."
+                    f"{get_strategy_doctrine_context()}"
                 ),
             },
             {

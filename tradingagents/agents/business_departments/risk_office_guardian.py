@@ -1,6 +1,7 @@
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    get_strategy_doctrine_context,
 )
 
 
@@ -15,6 +16,8 @@ Before the risk debate begins, issue a risk-office memo that frames the trade's
 main drawdown, concentration, liquidity, volatility, macro, and event risks.
 Your job is not to approve the trade; it is to define what risk must be debated
 and what guardrails should bind any final decision.
+
+{get_strategy_doctrine_context()}
 
 Investment Committee memo:
 {state.get("investment_committee_report", "")}

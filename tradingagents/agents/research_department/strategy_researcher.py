@@ -3,6 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_indicators,
+    get_strategy_doctrine_context,
     get_language_instruction,
     get_news,
     get_stock_data,
@@ -24,6 +25,7 @@ def create_strategy_researcher(llm):
             "confirmation, invalidation, position-sizing thought, and failure mode. "
             "Flag strategies that are only hypotheses and should be paper-tested "
             "before live execution."
+            f"{get_strategy_doctrine_context()}"
             + get_language_instruction()
         )
 

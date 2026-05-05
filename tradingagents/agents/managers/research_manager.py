@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
-from tradingagents.agents.utils.agent_utils import build_instrument_context
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_strategy_doctrine_context,
+)
 from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
@@ -43,7 +46,9 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
 ---
 
 **AI Research Department Brief:**
-{research_department_report}"""
+{research_department_report}
+
+{get_strategy_doctrine_context()}"""
 
         investment_plan = invoke_structured_or_freetext(
             structured_llm,

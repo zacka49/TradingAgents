@@ -92,3 +92,92 @@ def classify_day_trade_setup(
         take_profit_pct=0.06,
         note="Interesting candidate, but the setup does not meet autonomous day-trade criteria.",
     )
+
+
+def classify_intraday_setup(
+    *,
+    return_1m_pct: float,
+    return_5m_pct: float,
+    return_15m_pct: float,
+    session_return_pct: float,
+    volume_ratio: float,
+    volatility_pct: float,
+    quote_spread_pct: float,
+    risk_flags: Iterable[str],
+) -> StrategyProfile:
+    """Classify a real-time intraday setup for quick paper entries/exits."""
+    flags = set(risk_flags)
+    tradable_spread = quote_spread_pct <= 0.10 or quote_spread_pct == 0
+
+    if (
+        return_5m_pct > 0.35
+        and return_15m_pct > 0.70
+        and volume_ratio >= 1.20
+        and tradable_spread
+    ):
+        confidence = min(
+            0.95,
+            0.60
+            + min(return_5m_pct, 2.0) / 8.0
+            + min(return_15m_pct, 4.0) / 16.0
+            + min(volume_ratio, 4.0) / 18.0,
+        )
+        return StrategyProfile(
+            name="momentum_breakout",
+            confidence=round(confidence, 3),
+            auto_trade_allowed=True,
+            stop_loss_pct=0.018 if volatility_pct < 0.50 else 0.028,
+            take_profit_pct=0.040 if volatility_pct < 0.50 else 0.065,
+            note="Fast intraday upside momentum with confirming real-time volume.",
+        )
+
+    if (
+        session_return_pct > 0.80
+        and return_15m_pct > 0.25
+        and -0.40 <= return_1m_pct <= 0.45
+        and volume_ratio >= 0.85
+        and tradable_spread
+    ):
+        confidence = min(
+            0.90,
+            0.58
+            + min(session_return_pct, 5.0) / 25.0
+            + min(return_15m_pct, 2.5) / 18.0,
+        )
+        return StrategyProfile(
+            name="relative_strength_continuation",
+            confidence=round(confidence, 3),
+            auto_trade_allowed=True,
+            stop_loss_pct=0.014 if volatility_pct < 0.45 else 0.024,
+            take_profit_pct=0.030 if volatility_pct < 0.45 else 0.055,
+            note="Intraday relative strength is holding without a stretched latest minute.",
+        )
+
+    if return_5m_pct > 1.40 or session_return_pct > 5.0:
+        return StrategyProfile(
+            name="fade_or_news_watch",
+            confidence=0.42,
+            auto_trade_allowed=False,
+            stop_loss_pct=0.018,
+            take_profit_pct=0.035,
+            note="Move is extended enough that fresh catalyst review is required.",
+        )
+
+    if "wide_spread" in flags or "stale_live_trade" in flags:
+        return StrategyProfile(
+            name="liquidity_watch",
+            confidence=0.35,
+            auto_trade_allowed=False,
+            stop_loss_pct=0.012,
+            take_profit_pct=0.025,
+            note="Live trade/quote quality is not clean enough for autonomous entry.",
+        )
+
+    return StrategyProfile(
+        name="general_momentum_watch",
+        confidence=0.48,
+        auto_trade_allowed=False,
+        stop_loss_pct=0.016,
+        take_profit_pct=0.035,
+        note="Realtime setup is visible, but not strong enough for autonomous entry.",
+    )

@@ -61,6 +61,35 @@ def build_training_context(state) -> str:
         "override current evidence."
     )
 
+
+def get_strategy_doctrine_context() -> str:
+    """Return the current trading-strategy doctrine for decision agents.
+
+    Keep this concise: the full research file lives in
+    ``knowledge/trading_strategy_deep_dive_2026.md``.
+    """
+    return """
+
+Trading Strategy Doctrine:
+- Regime before signal: classify trend, range, volatility, liquidity, catalyst,
+  and market-index alignment before choosing any setup.
+- Deploy only tested long-side paper strategies for autonomous execution:
+  momentum breakout, opening-range breakout, and selective relative-strength
+  continuation. VWAP reclaim, range reversion, fading, news shock, and scalping
+  are watch/research modes unless backtests and live-data gates promote them.
+- A trade needs a named setup, trigger, confirmation, invalidation, position-size
+  logic, expected holding period, and post-trade review label.
+- Liquidity/data gates are mandatory: fresh price, clean spread, sufficient
+  volume, market open, no known halt/stale feed, and no duplicate working order.
+- Risk is part of the strategy: bracket exits, no averaging down, stop before
+  entry, reward/risk target, order-notional cap, portfolio exposure cap, and
+  stand-down after failed data quality or excessive drawdown.
+- Order flow and VWAP are confirmations, not standalone reasons to trade. Use
+    delta, large prints, absorption, and price vs VWAP only when the feed quality
+  is explicit and current.
+"""
+
+
 def create_msg_delete():
     def delete_messages(state):
         """Clear messages and add placeholder for Anthropic compatibility"""

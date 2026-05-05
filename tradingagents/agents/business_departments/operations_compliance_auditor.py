@@ -1,6 +1,7 @@
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    get_strategy_doctrine_context,
 )
 
 
@@ -14,6 +15,8 @@ def create_operations_compliance_auditor(llm):
 Audit the run before anything is treated as business-ready. Focus on data
 freshness, disclosure lag, ticker correctness, tool limitations, broker/order
 readiness, and whether the reasoning is auditable.
+
+{get_strategy_doctrine_context()}
 
 Stock discovery:
 {state.get("stock_discovery_report", "")}

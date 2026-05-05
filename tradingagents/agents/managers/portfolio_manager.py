@@ -14,6 +14,7 @@ from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    get_strategy_doctrine_context,
 )
 from tradingagents.agents.utils.structured import (
     bind_structured,
@@ -64,6 +65,8 @@ def create_portfolio_manager(llm):
 - Trading Desk plan: {trading_desk_report}
 - Independent Risk Office memo: {risk_office_report}
 {lessons_line}
+{get_strategy_doctrine_context()}
+
 **Risk Analysts Debate History:**
 {history}
 

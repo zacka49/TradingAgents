@@ -9,7 +9,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from tradingagents.company import CodexCEOCompanyRunner
+from tradingagents.company import CodexCEOCompanyRunner, apply_day_trader_profile
 from tradingagents.default_config import DEFAULT_CONFIG
 
 
@@ -26,6 +26,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--submit-paper", action="store_true")
     parser.add_argument("--ceo-approved", action="store_true")
     parser.add_argument("--autonomous-paper", action="store_true")
+    parser.add_argument(
+        "--strategy-profile",
+        choices=["balanced", "safe", "risky"],
+        default="balanced",
+        help="Apply a built-in autonomous day-trading profile before running.",
+    )
     parser.add_argument("--liquidate-non-targets", action="store_true")
     parser.add_argument("--disable-bracket-orders", action="store_true")
     parser.add_argument("--max-deploy-usd", type=float, default=None)
@@ -44,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     config = DEFAULT_CONFIG.copy()
+    if args.strategy_profile != "balanced":
+        config = apply_day_trader_profile(config, args.strategy_profile)
     if args.results_dir:
         config["results_dir"] = str(Path(args.results_dir))
     if args.max_deploy_usd is not None:

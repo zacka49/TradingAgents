@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timezone
 import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -13,12 +14,22 @@ from requests import HTTPError
 
 from tradingagents.agents.utils.market_scanner_tools import DEFAULT_DISCOVERY_UNIVERSE
 from tradingagents.company.backtest_lab import run_momentum_smoke_backtest
-from tradingagents.company.day_trading_strategy import classify_day_trade_setup
+from tradingagents.company.day_trading_strategy import (
+    StrategyProfile,
+    classify_day_trade_setup,
+    classify_intraday_setup,
+)
 from tradingagents.company.technology_scout import (
     build_technology_capabilities,
     capabilities_as_dicts,
     render_technology_scout_report,
 )
+from tradingagents.dataflows.alpaca_realtime import (
+    get_intraday_bars,
+    get_latest_quotes,
+    get_latest_trades,
+)
+from tradingagents.dataflows.order_flow import get_alpaca_order_flow_snapshot
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.execution import AlpacaPaperBroker, OrderIntent, evaluate_order_policy
 
@@ -47,6 +58,17 @@ class MarketCandidate:
     backtest_trades: int = 0
     backtest_passed: bool = True
     backtest_note: str = ""
+    strategy_profile: str = "balanced"
+    data_source: str = "daily"
+    intraday_return_1m_pct: float = 0.0
+    intraday_return_5m_pct: float = 0.0
+    intraday_return_15m_pct: float = 0.0
+    intraday_session_return_pct: float = 0.0
+    realtime_volume_ratio: float = 0.0
+    quote_spread_pct: float = 0.0
+    order_flow_delta_ratio: float = 0.0
+    order_flow_absorption_flags: List[str] = field(default_factory=list)
+    realtime_note: str = ""
 
 
 @dataclass
@@ -133,6 +155,8 @@ class CodexCEOCompanyRunner:
         account = self.broker.get_account()
         positions_payload = self.broker.get_positions()
         positions = positions_payload.get("positions", [])
+        open_orders_payload = self._get_open_orders()
+        open_orders = open_orders_payload.get("orders", [])
         clock = self.broker.get_clock()
 
         target_weights = self.build_target_weights(candidates)
@@ -141,6 +165,7 @@ class CodexCEOCompanyRunner:
             target_weights=target_weights,
             account=account,
             positions=positions,
+            open_orders=open_orders,
         )
         self.apply_order_plans(
             order_plans,
@@ -168,6 +193,7 @@ class CodexCEOCompanyRunner:
             trade_date=trade_date,
             account=account,
             positions=positions,
+            open_orders=open_orders,
             clock=clock,
             candidates=candidates,
             target_weights=target_weights,
@@ -196,6 +222,17 @@ class CodexCEOCompanyRunner:
         tickers = _clean_universe(universe or DEFAULT_DISCOVERY_UNIVERSE)
         max_universe = int(self.config.get("codex_ceo_max_universe", 30))
         tickers = tickers[: max(5, max_universe)]
+        limit = int(self.config.get("codex_ceo_watchlist_size", 10))
+
+        if self.config.get("codex_ceo_realtime_scan_enabled", False):
+            try:
+                realtime_candidates = self._scan_market_realtime(tickers)
+                if realtime_candidates:
+                    return realtime_candidates[: max(1, limit)]
+            except Exception:
+                if not self.config.get("codex_ceo_realtime_fallback_to_daily", True):
+                    raise
+
         lookback_days = str(self.config.get("codex_ceo_history_period", "60d"))
 
         data = yf.download(
@@ -217,8 +254,42 @@ class CodexCEOCompanyRunner:
                 candidates.append(candidate)
 
         ranked = sorted(candidates, key=lambda item: item.score, reverse=True)
-        limit = int(self.config.get("codex_ceo_watchlist_size", 10))
         return ranked[: max(1, limit)]
+
+    def _scan_market_realtime(self, tickers: Sequence[str]) -> List[MarketCandidate]:
+        lookback_minutes = int(self.config.get("codex_ceo_realtime_lookback_minutes", 90))
+        feed = self.config.get("alpaca_stock_feed") or None
+        bars_by_ticker = get_intraday_bars(
+            tickers,
+            lookback_minutes=lookback_minutes,
+            feed=feed,
+            timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
+        )
+        latest_trades = get_latest_trades(
+            tickers,
+            feed=feed,
+            timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
+        )
+        latest_quotes = get_latest_quotes(
+            tickers,
+            feed=feed,
+            timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
+        )
+
+        candidates = []
+        for ticker in tickers:
+            candidate = self._score_realtime_ticker(
+                ticker,
+                bars_by_ticker.get(ticker, []),
+                latest_trades.get(ticker, {}),
+                latest_quotes.get(ticker, {}),
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+
+        ranked = sorted(candidates, key=lambda item: item.score, reverse=True)
+        self._enrich_order_flow_candidates(ranked)
+        return sorted(ranked, key=lambda item: item.score, reverse=True)
 
     def _history_for_ticker(
         self,
@@ -298,6 +369,13 @@ class CodexCEOCompanyRunner:
             if not backtest.passed:
                 risk_flags.append("weak_backtest")
 
+        (
+            auto_trade_allowed,
+            stop_loss_pct,
+            take_profit_pct,
+            strategy_note,
+        ) = self._profile_strategy_controls(strategy, risk_flags)
+
         return MarketCandidate(
             ticker=ticker,
             latest_price=round(latest, 4),
@@ -310,10 +388,10 @@ class CodexCEOCompanyRunner:
             risk_flags=risk_flags,
             strategy=strategy.name,
             strategy_confidence=strategy.confidence,
-            strategy_note=strategy.note,
-            auto_trade_allowed=strategy.auto_trade_allowed,
-            stop_loss_pct=strategy.stop_loss_pct,
-            take_profit_pct=strategy.take_profit_pct,
+            strategy_note=strategy_note,
+            auto_trade_allowed=auto_trade_allowed,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
             backtest_return_pct=backtest.strategy_return_pct if backtest else 0.0,
             backtest_benchmark_pct=backtest.buy_hold_return_pct if backtest else 0.0,
             backtest_excess_pct=backtest.excess_return_pct if backtest else 0.0,
@@ -321,7 +399,284 @@ class CodexCEOCompanyRunner:
             backtest_trades=backtest.trade_count if backtest else 0,
             backtest_passed=backtest.passed if backtest else True,
             backtest_note=backtest.note if backtest else "",
+            strategy_profile=str(self.config.get("strategy_profile_name", "balanced")),
         )
+
+    def _score_realtime_ticker(
+        self,
+        ticker: str,
+        bars: Sequence[Dict[str, Any]],
+        latest_trade: Dict[str, Any],
+        latest_quote: Dict[str, Any],
+    ) -> MarketCandidate | None:
+        bars = self._prefer_regular_session_bars(bars)
+        if len(bars) < 3:
+            return None
+
+        closes = [_safe_float(bar.get("c")) for bar in bars if _safe_float(bar.get("c")) > 0]
+        volumes = [_safe_float(bar.get("v")) for bar in bars if _safe_float(bar.get("v")) >= 0]
+        if len(closes) < 3:
+            return None
+
+        trade_price = _safe_float(latest_trade.get("p"))
+        latest = trade_price if trade_price > 0 else closes[-1]
+        if latest < float(self.config.get("codex_ceo_min_price", 5.0)):
+            return None
+
+        recent_volume = sum(volumes[-5:]) if volumes else 0.0
+        if recent_volume < float(self.config.get("codex_ceo_realtime_min_recent_volume", 2_500)):
+            return None
+
+        open_price = _safe_float(bars[0].get("o"), closes[0]) or closes[0]
+        return_1m = _pct_change(closes[-2], latest)
+        return_5m = _pct_change(closes[-min(6, len(closes))], latest)
+        return_15m = _pct_change(closes[-min(16, len(closes))], latest)
+        session_return = _pct_change(open_price, latest)
+
+        base_volumes = volumes[:-5] if len(volumes) > 6 else volumes
+        base_volume = sum(base_volumes) / max(1, len(base_volumes))
+        recent_avg_volume = recent_volume / min(5, max(1, len(volumes)))
+        volume_ratio = recent_avg_volume / base_volume if base_volume else 0.0
+
+        minute_returns = [
+            _pct_change(closes[index - 1], closes[index])
+            for index in range(1, len(closes))
+            if closes[index - 1] > 0
+        ][-20:]
+        volatility = (
+            float(pd.Series(minute_returns).std()) if len(minute_returns) >= 2 else 0.0
+        )
+
+        bid = _safe_float(latest_quote.get("bp"))
+        ask = _safe_float(latest_quote.get("ap"))
+        midpoint = (bid + ask) / 2 if bid > 0 and ask > 0 and ask >= bid else 0.0
+        spread_pct = ((ask - bid) / midpoint * 100.0) if midpoint else 0.0
+
+        risk_flags: List[str] = []
+        if spread_pct > float(self.config.get("codex_ceo_realtime_max_spread_pct", 0.12)):
+            risk_flags.append("wide_spread")
+        if volatility > float(self.config.get("codex_ceo_realtime_high_volatility_pct", 0.85)):
+            risk_flags.append("high_volatility")
+        if volume_ratio > 4.0:
+            risk_flags.append("volume_spike")
+        if self._trade_age_seconds(latest_trade) > int(
+            self.config.get("codex_ceo_realtime_max_trade_age_seconds", 180)
+        ):
+            risk_flags.append("stale_live_trade")
+
+        score = (
+            return_1m * 0.30
+            + return_5m * 0.65
+            + return_15m * 0.45
+            + session_return * 0.20
+            + max(0.0, min(volume_ratio - 1.0, 4.0)) * 0.75
+            - max(0.0, spread_pct - 0.04) * 8.0
+            - max(0.0, volatility - 0.45) * 1.5
+        )
+
+        strategy = self._opening_range_strategy(
+            bars=bars,
+            latest_price=latest,
+            return_5m_pct=return_5m,
+            volume_ratio=volume_ratio,
+            volatility_pct=volatility,
+            quote_spread_pct=spread_pct,
+        ) or classify_intraday_setup(
+            return_1m_pct=return_1m,
+            return_5m_pct=return_5m,
+            return_15m_pct=return_15m,
+            session_return_pct=session_return,
+            volume_ratio=volume_ratio,
+            volatility_pct=volatility,
+            quote_spread_pct=spread_pct,
+            risk_flags=risk_flags,
+        )
+        (
+            auto_trade_allowed,
+            stop_loss_pct,
+            take_profit_pct,
+            strategy_note,
+        ) = self._profile_strategy_controls(strategy, risk_flags)
+
+        return MarketCandidate(
+            ticker=ticker,
+            latest_price=round(latest, 4),
+            return_1d_pct=round(return_5m, 3),
+            return_5d_pct=round(return_15m, 3),
+            return_20d_pct=round(session_return, 3),
+            volume_ratio=round(volume_ratio, 3),
+            volatility_20d_pct=round(volatility, 3),
+            score=round(score, 3),
+            risk_flags=risk_flags,
+            strategy=strategy.name,
+            strategy_confidence=strategy.confidence,
+            strategy_note=strategy_note,
+            auto_trade_allowed=auto_trade_allowed,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            strategy_profile=str(self.config.get("strategy_profile_name", "balanced")),
+            data_source="alpaca_realtime",
+            intraday_return_1m_pct=round(return_1m, 3),
+            intraday_return_5m_pct=round(return_5m, 3),
+            intraday_return_15m_pct=round(return_15m, 3),
+            intraday_session_return_pct=round(session_return, 3),
+            realtime_volume_ratio=round(volume_ratio, 3),
+            quote_spread_pct=round(spread_pct, 4),
+            realtime_note=(
+                f"Alpaca latest trade/quote plus {len(bars)} one-minute bars."
+            ),
+        )
+
+    def _profile_strategy_controls(
+        self,
+        strategy,
+        risk_flags: Sequence[str],
+    ) -> tuple[bool, float, float, str]:
+        stop_loss_pct = float(strategy.stop_loss_pct) * float(
+            self.config.get("day_trade_stop_loss_multiplier", 1.0)
+        )
+        take_profit_pct = float(strategy.take_profit_pct) * float(
+            self.config.get("day_trade_take_profit_multiplier", 1.0)
+        )
+        stop_loss_pct = max(
+            float(self.config.get("day_trade_min_stop_loss_pct", 0.005)),
+            min(float(self.config.get("day_trade_max_stop_loss_pct", 0.10)), stop_loss_pct),
+        )
+        take_profit_pct = max(
+            float(self.config.get("day_trade_min_take_profit_pct", 0.01)),
+            min(
+                float(self.config.get("day_trade_max_take_profit_pct", 0.20)),
+                take_profit_pct,
+            ),
+        )
+
+        blocked_flags = {
+            str(flag)
+            for flag in self.config.get("day_trade_block_risk_flags", [])
+            if str(flag).strip()
+        }
+        matched_flags = sorted(blocked_flags.intersection(set(risk_flags)))
+        auto_trade_allowed = bool(strategy.auto_trade_allowed) and not matched_flags
+        note = strategy.note
+        if matched_flags:
+            note = f"{note} Profile blocked risk flags: {', '.join(matched_flags)}."
+        return (
+            auto_trade_allowed,
+            round(stop_loss_pct, 4),
+            round(take_profit_pct, 4),
+            note,
+        )
+
+    def _prefer_regular_session_bars(
+        self,
+        bars: Sequence[Dict[str, Any]],
+    ) -> Sequence[Dict[str, Any]]:
+        regular = [bar for bar in bars if self._is_regular_session_bar(bar)]
+        return regular or bars
+
+    def _is_regular_session_bar(self, bar: Dict[str, Any]) -> bool:
+        timestamp = self._bar_timestamp_et(bar)
+        if timestamp is None:
+            return False
+        minutes = timestamp.hour * 60 + timestamp.minute
+        return 9 * 60 + 30 <= minutes <= 16 * 60
+
+    def _bar_timestamp_et(self, bar: Dict[str, Any]) -> datetime | None:
+        raw_time = bar.get("t")
+        if not raw_time:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(raw_time).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ZoneInfo("America/New_York"))
+
+    def _opening_range_strategy(
+        self,
+        *,
+        bars: Sequence[Dict[str, Any]],
+        latest_price: float,
+        return_5m_pct: float,
+        volume_ratio: float,
+        volatility_pct: float,
+        quote_spread_pct: float,
+    ) -> StrategyProfile | None:
+        if len(bars) < 4 or latest_price <= 0:
+            return None
+        first_timestamp = self._bar_timestamp_et(bars[0])
+        latest_timestamp = self._bar_timestamp_et(bars[-1])
+        if first_timestamp is None or latest_timestamp is None:
+            return None
+        first_minutes = first_timestamp.hour * 60 + first_timestamp.minute
+        latest_minutes = latest_timestamp.hour * 60 + latest_timestamp.minute
+        if first_minutes > 9 * 60 + 35 or latest_minutes > 11 * 60:
+            return None
+
+        opening_high = max(_safe_float(bar.get("h")) for bar in bars[:3])
+        if opening_high <= 0 or latest_price <= opening_high:
+            return None
+        if return_5m_pct < 0.10 or volume_ratio < 1.05 or quote_spread_pct > 0.12:
+            return None
+
+        confidence = min(
+            0.94,
+            0.64
+            + min((latest_price - opening_high) / latest_price * 100.0, 1.5) / 7.0
+            + min(volume_ratio, 3.0) / 18.0,
+        )
+        return StrategyProfile(
+            name="opening_range_breakout_15m",
+            confidence=round(confidence, 3),
+            auto_trade_allowed=True,
+            stop_loss_pct=0.014 if volatility_pct < 0.55 else 0.024,
+            take_profit_pct=0.034 if volatility_pct < 0.55 else 0.060,
+            note="Price is breaking the first 15-minute range with live volume confirmation.",
+        )
+
+    def _enrich_order_flow_candidates(self, candidates: Sequence[MarketCandidate]) -> None:
+        if not self.config.get("order_flow_enabled", True):
+            return
+        enrichment_limit = int(self.config.get("codex_ceo_order_flow_enrichment_limit", 6))
+        lookback_minutes = int(self.config.get("order_flow_lookback_minutes", 15))
+        for candidate in list(candidates)[: max(0, enrichment_limit)]:
+            try:
+                snapshot = get_alpaca_order_flow_snapshot(
+                    candidate.ticker,
+                    lookback_minutes=lookback_minutes,
+                    timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
+                )
+            except Exception:
+                continue
+            if snapshot.get("status") != "ok":
+                continue
+            delta_ratio = _safe_float(snapshot.get("delta_ratio"))
+            absorption_flags = [
+                str(flag) for flag in snapshot.get("absorption_flags", []) if str(flag)
+            ]
+            candidate.order_flow_delta_ratio = round(delta_ratio, 4)
+            candidate.order_flow_absorption_flags = absorption_flags
+            if delta_ratio > 0:
+                candidate.score = round(candidate.score + min(delta_ratio, 0.65) * 2.0, 3)
+            if "recent_buy_pressure_absorbed" in absorption_flags:
+                candidate.score = round(candidate.score - 0.8, 3)
+                if "buy_pressure_absorbed" not in candidate.risk_flags:
+                    candidate.risk_flags.append("buy_pressure_absorbed")
+            if "recent_sell_pressure_absorbed" in absorption_flags:
+                candidate.score = round(candidate.score + 0.35, 3)
+
+    def _trade_age_seconds(self, latest_trade: Dict[str, Any]) -> int:
+        raw_time = latest_trade.get("t")
+        if not raw_time:
+            return 10**9
+        try:
+            parsed = datetime.fromisoformat(str(raw_time).replace("Z", "+00:00"))
+        except ValueError:
+            return 10**9
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int((datetime.now(timezone.utc) - parsed).total_seconds())
 
     def build_target_weights(self, candidates: Sequence[MarketCandidate]) -> Dict[str, float]:
         count = min(
@@ -345,6 +700,7 @@ class CodexCEOCompanyRunner:
             if candidate.auto_trade_allowed
             and candidate.strategy in allowed_strategies
             and candidate.strategy_confidence >= min_confidence
+            and candidate.score >= float(self.config.get("realtime_score_minimum", -9999.0))
             and (
                 candidate.backtest_passed
                 or not bool(self.config.get("backtest_lab_gate_targets", True))
@@ -364,11 +720,13 @@ class CodexCEOCompanyRunner:
         target_weights: Dict[str, float],
         account: Dict[str, Any],
         positions: Sequence[Dict[str, Any]],
+        open_orders: Sequence[Dict[str, Any]] | None = None,
     ) -> List[PortfolioOrderPlan]:
         candidate_by_ticker = {candidate.ticker: candidate for candidate in candidates}
         position_by_ticker = {
             str(position.get("symbol", "")).upper(): position for position in positions
         }
+        open_buy_notional, open_sell_symbols = self._summarize_open_orders(open_orders or [])
         equity = _safe_float(account.get("equity"))
         buying_power = _safe_float(account.get("buying_power"))
         max_deploy = float(self.config.get("portfolio_max_deploy_usd", 1500.0))
@@ -385,6 +743,7 @@ class CodexCEOCompanyRunner:
             current_market_value = _safe_float(
                 position_by_ticker.get(ticker, {}).get("market_value")
             )
+            current_market_value += open_buy_notional.get(ticker, 0.0)
             delta = target_notional - current_market_value
             if abs(delta) < min_order_notional:
                 continue
@@ -393,6 +752,8 @@ class CodexCEOCompanyRunner:
             if abs(delta) < min_order_notional:
                 continue
             side = "buy" if delta > 0 else "sell"
+            if side == "buy" and ticker in open_sell_symbols:
+                continue
             quantity = abs(delta) / candidate.latest_price
             if side == "sell":
                 current_qty = abs(_safe_float(position_by_ticker.get(ticker, {}).get("qty")))
@@ -431,6 +792,8 @@ class CodexCEOCompanyRunner:
             for ticker, position in position_by_ticker.items():
                 if ticker in target_weights:
                     continue
+                if ticker in open_sell_symbols:
+                    continue
                 qty = abs(_safe_float(position.get("qty")))
                 market_value = abs(_safe_float(position.get("market_value")))
                 if qty <= 0 or market_value < min_order_notional:
@@ -450,6 +813,32 @@ class CodexCEOCompanyRunner:
                 )
 
         return plans
+
+    def _summarize_open_orders(
+        self, open_orders: Sequence[Dict[str, Any]]
+    ) -> tuple[Dict[str, float], set[str]]:
+        open_buy_notional: Dict[str, float] = {}
+        open_sell_symbols: set[str] = set()
+        for order in open_orders:
+            symbol = str(order.get("symbol", "")).upper()
+            side = str(order.get("side", "")).lower()
+            if not symbol or side not in {"buy", "sell"}:
+                continue
+            if side == "sell":
+                open_sell_symbols.add(symbol)
+                continue
+            qty = _safe_float(order.get("qty"))
+            notional = _safe_float(order.get("notional"))
+            price = (
+                _safe_float(order.get("limit_price"))
+                or _safe_float(order.get("stop_price"))
+                or _safe_float(order.get("filled_avg_price"))
+            )
+            if notional <= 0 and qty > 0 and price > 0:
+                notional = qty * price
+            if notional > 0:
+                open_buy_notional[symbol] = open_buy_notional.get(symbol, 0.0) + notional
+        return open_buy_notional, open_sell_symbols
 
     def apply_order_plans(
         self,
@@ -589,6 +978,7 @@ class CodexCEOCompanyRunner:
         trade_date: str,
         account: Dict[str, Any],
         positions: Sequence[Dict[str, Any]],
+        open_orders: Sequence[Dict[str, Any]],
         clock: Dict[str, Any],
         candidates: Sequence[MarketCandidate],
         target_weights: Dict[str, float],
@@ -603,6 +993,7 @@ class CodexCEOCompanyRunner:
             "trade_date": trade_date,
             "account": self._account_summary(account),
             "positions": list(positions),
+            "open_orders": list(open_orders),
             "clock": clock,
             "candidates": [asdict(candidate) for candidate in candidates],
             "target_weights": target_weights,
@@ -621,6 +1012,7 @@ class CodexCEOCompanyRunner:
                 trade_date=trade_date,
                 account=account,
                 positions=positions,
+                open_orders=open_orders,
                 clock=clock,
                 candidates=candidates,
                 target_weights=target_weights,
@@ -644,6 +1036,7 @@ class CodexCEOCompanyRunner:
         trade_date: str,
         account: Dict[str, Any],
         positions: Sequence[Dict[str, Any]],
+        open_orders: Sequence[Dict[str, Any]],
         clock: Dict[str, Any],
         candidates: Sequence[MarketCandidate],
         target_weights: Dict[str, float],
@@ -684,6 +1077,27 @@ class CodexCEOCompanyRunner:
         else:
             lines.append("No open positions reported by the paper account.")
 
+        lines.extend(["", "## Open Alpaca Orders"])
+        if open_orders:
+            lines.extend(
+                [
+                    "| Symbol | Side | Qty | Type | Status |",
+                    "| --- | --- | ---: | --- | --- |",
+                ]
+            )
+            for order in open_orders[:20]:
+                lines.append(
+                    "| {symbol} | {side} | {qty} | {type} | {status} |".format(
+                        symbol=order.get("symbol", ""),
+                        side=order.get("side", ""),
+                        qty=order.get("qty", ""),
+                        type=order.get("type", ""),
+                        status=order.get("status", ""),
+                    )
+                )
+        else:
+            lines.append("No open Alpaca orders reported.")
+
         lines.extend(
             [
                 "",
@@ -708,6 +1122,26 @@ class CodexCEOCompanyRunner:
                     score=candidate.score,
                 )
             )
+
+        if candidates and candidates[0].data_source == "alpaca_realtime":
+            lines.extend(
+                [
+                    "",
+                    "## Realtime Data",
+                    "| Ticker | 1m % | 5m % | 15m % | Session % | Spread % | Flow Delta | Absorption |",
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+                ]
+            )
+            for candidate in candidates[:10]:
+                lines.append(
+                    f"| {candidate.ticker} | {candidate.intraday_return_1m_pct:.2f} | "
+                    f"{candidate.intraday_return_5m_pct:.2f} | "
+                    f"{candidate.intraday_return_15m_pct:.2f} | "
+                    f"{candidate.intraday_session_return_pct:.2f} | "
+                    f"{candidate.quote_spread_pct:.3f} | "
+                    f"{candidate.order_flow_delta_ratio:.3f} | "
+                    f"{', '.join(candidate.order_flow_absorption_flags) or 'none'} |"
+                )
 
         if self.config.get("backtest_lab_enabled", True):
             lines.extend(
@@ -786,3 +1220,12 @@ class CodexCEOCompanyRunner:
         if (configured / "knowledge").exists() or (configured / ".agents").exists():
             return configured
         return configured.parent
+
+    def _get_open_orders(self) -> Dict[str, Any]:
+        get_orders = getattr(self.broker, "get_orders", None)
+        if get_orders is None:
+            return {"orders": []}
+        try:
+            return get_orders("open")
+        except Exception:
+            return {"orders": []}

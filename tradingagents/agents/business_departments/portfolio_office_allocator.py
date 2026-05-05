@@ -1,6 +1,7 @@
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    get_strategy_doctrine_context,
 )
 
 
@@ -14,6 +15,8 @@ def create_portfolio_office_allocator(llm):
 The Portfolio Manager has made the final trade decision. Translate that decision
 into portfolio-aware allocation guidance, including exposure, rebalancing,
 monitoring, and what to review next run.
+
+{get_strategy_doctrine_context()}
 
 Final Portfolio Manager decision:
 {state.get("final_trade_decision", "")}

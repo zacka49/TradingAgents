@@ -1,6 +1,7 @@
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    get_strategy_doctrine_context,
 )
 
 
@@ -14,6 +15,8 @@ def create_trading_desk_strategist(llm):
 Turn the Trader's transaction proposal into an execution plan that a real desk
 could act on. Focus on timing, liquidity, entry method, stop handling, order
 type, and what would make the desk stand down.
+
+{get_strategy_doctrine_context()}
 
 Investment Committee memo:
 {state.get("investment_committee_report", "")}

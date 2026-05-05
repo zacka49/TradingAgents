@@ -1,5 +1,8 @@
 
 
+from tradingagents.agents.utils.agent_utils import get_strategy_doctrine_context
+
+
 def create_aggressive_debator(llm):
     def aggressive_node(state) -> dict:
         risk_debate_state = state["risk_debate_state"]
@@ -34,9 +37,10 @@ AI Research Department Brief: {research_department_report}
 Investment Committee Memo: {investment_committee_report}
 Trading Desk Plan: {trading_desk_report}
 Independent Risk Office Memo: {risk_office_report}
+{get_strategy_doctrine_context()}
 Here is the current conversation history: {history} Here are the last arguments from the conservative analyst: {current_conservative_response} Here are the last arguments from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
 
-Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting."""
+Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. You may advocate higher reward, but you must still respect the doctrine's data-quality, stop-loss, and paper-execution guardrails. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting."""
 
         response = llm.invoke(prompt)
 

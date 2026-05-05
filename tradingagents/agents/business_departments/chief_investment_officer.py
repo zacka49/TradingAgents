@@ -1,6 +1,7 @@
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    get_strategy_doctrine_context,
 )
 
 
@@ -14,6 +15,8 @@ def create_chief_investment_officer(llm):
 Review all research before the Trader acts. Decide whether the research plan is
 credible enough to become a trade proposal, and identify what the Trader must
 not ignore.
+
+{get_strategy_doctrine_context()}
 
 Pre-market stock discovery:
 {state.get("stock_discovery_report", "")}

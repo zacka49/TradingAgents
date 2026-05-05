@@ -30,6 +30,7 @@ Run autonomous paper submission without the CEO approval gate:
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_codex_ceo_company.py `
   --results-dir results `
+  --strategy-profile safe `
   --max-deploy-usd 1250 `
   --target-positions 5 `
   --max-order-notional-usd 250 `
@@ -40,6 +41,36 @@ Run autonomous paper submission without the CEO approval gate:
 Autonomous mode is still paper-only and still enforces the market-open gate,
 order-notional cap, deploy cap, liquidity filter, and strategy-confidence
 filter.
+
+Run the full market-hours autonomous loop with both day-trading profiles:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_autonomous_day_trader.py `
+  --strategy both `
+  --run-until-close `
+  --interval-seconds 300 `
+  --results-dir results/autonomous_day_trader
+```
+
+The loop uses Alpaca's trading clock, so it only submits paper orders while the
+US market is actually open. It starts a safe profile first, then a risky profile.
+Every accepted paper order is sent to WhatsApp when the Twilio env vars are set.
+
+Strategy profiles:
+
+- `safe`: smaller orders, fewer target positions, higher confidence threshold,
+  tighter stops, and blocks wider-spread/high-volatility/weak-backtest setups.
+- `risky`: larger paper order caps, more target positions, lower confidence
+  threshold, wider stops, larger take-profit brackets, and permits more momentum
+  breakouts.
+
+Realtime data path:
+
+- Alpaca 1-minute intraday bars rank the liquid universe.
+- Alpaca latest trades and quotes refresh prices, spreads, and stale-trade flags.
+- Alpaca trade/quote-derived order flow adds volume profile, delta, large prints,
+  and absorption flags for the strongest candidates.
+- Bracket orders attach stop-loss and take-profit exits to submitted buy orders.
 
 Useful efficiency controls:
 
@@ -65,6 +96,9 @@ Defaults favor weak local hardware:
 - Backtest Lab lives in `tradingagents/company/backtest_lab.py`; use
   `--no-backtest-lab` to skip it or `--allow-weak-backtests` to make it
   advisory only.
+- Autonomous safe/risky profile settings live in
+  `tradingagents/company/strategy_profiles.py`.
+- The market-hours loop lives in `scripts/run_autonomous_day_trader.py`.
 - Reusable research lives in `knowledge/day_trading_volatility_research.md` and
   `.agents/skills/day-trading-research/`.
 - Financial AI technology scouting lives in

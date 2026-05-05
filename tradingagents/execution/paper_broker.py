@@ -31,3 +31,6 @@ class PaperBroker:
 
     def get_account(self) -> Dict[str, Any]:
         raise NotImplementedError
+
+    def get_orders(self, status: str = "open") -> Dict[str, Any]:
+        raise NotImplementedError
