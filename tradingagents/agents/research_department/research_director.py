@@ -14,7 +14,7 @@ def create_research_director(llm):
 Synthesize the specialist memos below into a CEO-ready research department brief.
 Your brief should:
 - identify the highest-value signals and what changed today
-- reconcile conflicts between news, strategy, copy-trading, and analyst work
+- reconcile conflicts between news, strategy, GitHub research, copy-trading, and analyst work
 - call out data freshness or disclosure-lag limitations
 - hand the bull and bear researchers a short list of questions they must debate
 - end with a Markdown table of signal, impact, confidence, and owner
@@ -22,11 +22,17 @@ Your brief should:
 Current News Scout:
 {state.get("current_news_report", "")}
 
+Stock Discovery Researcher:
+{state.get("stock_discovery_report", "")}
+
 Strategy Researcher:
 {state.get("strategy_report", "")}
 
 Copy Trading Researcher:
 {state.get("copy_trading_report", "")}
+
+GitHub Researcher:
+{state.get("github_research_report", "")}
 
 Core analyst reports:
 Market: {state.get("market_report", "")}

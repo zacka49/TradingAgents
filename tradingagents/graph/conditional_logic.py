@@ -11,6 +11,14 @@ class ConditionalLogic:
         self.max_debate_rounds = max_debate_rounds
         self.max_risk_discuss_rounds = max_risk_discuss_rounds
 
+    def should_continue_stock_discovery(self, state: AgentState):
+        """Determine if pre-market stock discovery should continue using tools."""
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_stock_discovery"
+        return "Msg Clear Stock Discovery"
+
     def should_continue_market(self, state: AgentState):
         """Determine if market analysis should continue."""
         messages = state["messages"]
@@ -66,6 +74,14 @@ class ConditionalLogic:
         if last_message.tool_calls:
             return "tools_copy_trading"
         return "Msg Clear Copy Trading"
+
+    def should_continue_github_research(self, state: AgentState):
+        """Determine if the GitHub researcher should continue using tools."""
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools_github_research"
+        return "Msg Clear GitHub Research"
 
     def should_continue_debate(self, state: AgentState) -> str:
         """Determine if debate should continue."""

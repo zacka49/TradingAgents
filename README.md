@@ -84,12 +84,26 @@ Our framework decomposes complex trading tasks into specialized roles. This ensu
 </p>
 
 ### AI Research Department
+- Stock Discovery Researcher: runs before the market analyst and suggests 10 stocks/ETFs for the rest of the business to consider.
 - Current News Scout: monitors fresh company, sector, macro, regulatory, and earnings-adjacent developments before debate.
 - Strategy Researcher: proposes testable trading strategies with triggers, confirmations, invalidation levels, and paper-test notes.
 - Copy Trading Researcher: reviews public politician trades, SEC disclosure filings, insider transactions, and large-holder snapshots.
+- GitHub Researcher: monitors popular financial AI, trading, data, agent, and backtesting repos for reusable architecture and safety lessons.
 - Research Director: merges the specialist memos into a CEO-ready research brief that feeds the bull/bear debate, trader, risk analysts, and portfolio manager.
 
 See [docs/research_department.md](docs/research_department.md) for the recommended free/low-cost AI and data provider stack.
+
+### Codex CEO Company Mode
+- Codex CEO mode is the compute-light daily operating layer: deterministic market screening, one optional local Ollama staff memo, a `ceo_briefing_pack.md`, and guarded Alpaca paper-order planning.
+- It defaults to local Ollama (`qwen3:0.6b`) for weak GPU/CPU setups. Autonomous paper mode can skip the CEO approval gate while preserving market-open, size, liquidity, and strategy-confidence gates.
+- A lightweight Backtest Lab uses Backtrader over already-loaded daily bars to sanity-check momentum candidates before target weights are selected.
+- Each run can also include a Technology Scout report that tracks useful external systems such as TradingAgents upstream, FinRobot, FinGPT, LEAN, Backtrader, OpenBB, LangGraph, and OpenAI Agents/Responses.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_codex_ceo_company.py --results-dir results
+```
+
+See [docs/codex_ceo_company.md](docs/codex_ceo_company.md) for autonomous paper submission, technology scouting, day-trading strategy rules, and efficiency controls.
 
 ### Trader Agent
 - Composes reports from the analysts and researchers to make informed trading decisions. It determines the timing and magnitude of trades based on comprehensive market insights.
@@ -97,6 +111,14 @@ See [docs/research_department.md](docs/research_department.md) for the recommend
 <p align="center">
   <img src="assets/trader.png" width="70%" style="display: inline-block; margin: 0 2%;">
 </p>
+
+### Expanded AI Business Departments
+- Investment Committee: a Chief Investment Officer reviews the research plan before the Trader acts.
+- Trading Desk: an execution strategist turns the Trader proposal into entry, exit, liquidity, and stand-down guidance.
+- Risk Office: an independent guardian frames stress scenarios and guardrails before the risk debate.
+- Portfolio Office: converts the Portfolio Manager decision into allocation, rebalancing, and monitoring guidance.
+- Operations and Compliance: audits ticker correctness, data freshness, disclosure lag, and human-review requirements.
+- Evaluation Department: defines benchmarks, metrics, and learning notes for future paper-trading review.
 
 ### Risk Management and Portfolio Manager
 - Continuously evaluates portfolio risk by assessing market volatility, liquidity, and other risk factors. The risk management team evaluates and adjusts trading strategies, providing assessment reports to the Portfolio Manager for final decision.

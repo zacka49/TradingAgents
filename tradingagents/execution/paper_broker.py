@@ -10,6 +10,10 @@ class OrderIntent:
     side: str
     quantity: float
     order_type: str = "market"
+    time_in_force: str = "day"
+    order_class: str | None = None
+    take_profit_limit_price: float | None = None
+    stop_loss_stop_price: float | None = None
 
 
 class PaperBroker:

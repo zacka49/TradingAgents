@@ -29,6 +29,7 @@ def create_strategy_researcher(llm):
 
         context = (
             f"Existing analyst context:\n\n"
+            f"Pre-market stock discovery report:\n{state.get('stock_discovery_report', '')}\n\n"
             f"Market report:\n{state.get('market_report', '')}\n\n"
             f"Sentiment report:\n{state.get('sentiment_report', '')}\n\n"
             f"News report:\n{state.get('news_report', '')}\n\n"

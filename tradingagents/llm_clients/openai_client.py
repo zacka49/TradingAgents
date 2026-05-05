@@ -107,6 +107,7 @@ class DeepSeekChatOpenAI(NormalizedChatOpenAI):
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "reasoning_effort",
     "api_key", "callbacks", "http_client", "http_async_client",
+    "temperature", "max_tokens", "model_kwargs", "extra_body",
 )
 
 # Provider base URLs and API key env vars

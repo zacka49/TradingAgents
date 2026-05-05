@@ -23,9 +23,9 @@ DEFAULT_CONFIG = {
     "max_order_notional_usd": 250.0,
     "allowed_symbols": [],  # empty => allow all symbols
     # LLM settings
-    "llm_provider": "openai",
-    "deep_think_llm": "gpt-5.4",
-    "quick_think_llm": "gpt-5.4-mini",
+    "llm_provider": os.getenv("TRADINGAGENTS_LLM_PROVIDER", "ollama"),
+    "deep_think_llm": os.getenv("TRADINGAGENTS_DEEP_MODEL", os.getenv("OLLAMA_DEEP_MODEL", "qwen3:0.6b")),
+    "quick_think_llm": os.getenv("TRADINGAGENTS_QUICK_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:0.6b")),
     # When None, each provider's client falls back to its own default endpoint
     # (api.openai.com for OpenAI, generativelanguage.googleapis.com for Gemini, ...).
     # The CLI overrides this per provider when the user picks one. Keeping a
@@ -45,6 +45,53 @@ DEFAULT_CONFIG = {
     # AI research department: runs after core analysts and before the
     # bull/bear debate, adding current-news, strategy, and copy-trading memos.
     "research_department_enabled": True,
+    "github_research_enabled": True,
+    # Pre-market discovery runs before the core analyst team and suggests 10
+    # stocks/ETFs the rest of the business should consider.
+    "stock_discovery_enabled": True,
+    # Expanded AI business departments around the core trading flow:
+    # Investment Committee, Trading Desk, Risk Office, Portfolio Office,
+    # Operations/Compliance, and Evaluation.
+    "business_departments_enabled": True,
+    # Codex CEO mode: compute-light daily company workflow. Local Ollama can
+    # provide one short staff memo, while Codex reviews the briefing pack in
+    # this workspace before paper execution.
+    "company_operating_mode": "codex_ceo",
+    "compute_mode": "efficient",
+    "ceo_approval_required": True,
+    "autonomous_paper_trading_enabled": False,
+    "ollama_base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+    "ollama_staff_memo_enabled": True,
+    "ollama_staff_model": os.getenv("OLLAMA_STAFF_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:0.6b")),
+    "ollama_temperature": 0.1,
+    "ollama_num_ctx": 2048,
+    "ollama_num_predict": 350,
+    "ollama_timeout_seconds": 90,
+    "codex_ceo_max_universe": 30,
+    "codex_ceo_watchlist_size": 10,
+    "codex_ceo_history_period": "60d",
+    "codex_ceo_min_price": 5.0,
+    "codex_ceo_min_avg_volume": 1_000_000,
+    "codex_ceo_universe": [],
+    "portfolio_target_positions": 5,
+    "portfolio_deploy_pct": 0.60,
+    "portfolio_max_position_weight": 0.20,
+    "portfolio_max_deploy_usd": 1500.0,
+    "portfolio_min_order_notional_usd": 25.0,
+    "portfolio_liquidate_non_targets": False,
+    "day_trade_auto_strategies": [
+        "momentum_breakout",
+        "relative_strength_continuation",
+    ],
+    "day_trade_min_strategy_confidence": 0.58,
+    "use_bracket_orders": True,
+    "refresh_live_prices_before_submit": True,
+    "backtest_lab_enabled": True,
+    "backtest_lab_gate_targets": True,
+    "backtest_lab_min_bars": 40,
+    "backtest_lab_min_strategy_return_pct": -10.0,
+    "backtest_lab_min_excess_return_pct": -8.0,
+    "technology_scout_enabled": True,
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,

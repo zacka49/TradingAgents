@@ -44,6 +44,7 @@ def create_copy_trading_researcher(llm):
                     "You have access to the following tools: {tool_names}.\n"
                     "{system_message}\nFor your reference, the current date is "
                     "{current_date}. {instrument_context}\n\n"
+                    "Pre-market stock discovery context:\n{stock_discovery_report}\n\n"
                     "Current news context:\n{current_news_report}\n\n"
                     "Strategy context:\n{strategy_report}",
                 ),
@@ -55,6 +56,7 @@ def create_copy_trading_researcher(llm):
         prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
+        prompt = prompt.partial(stock_discovery_report=state.get("stock_discovery_report", ""))
         prompt = prompt.partial(current_news_report=state.get("current_news_report", ""))
         prompt = prompt.partial(strategy_report=state.get("strategy_report", ""))
 

@@ -48,6 +48,12 @@ from tradingagents.agents.utils.copy_trading_tools import (
     get_institutional_holders,
     get_sec_disclosure_filings,
 )
+from tradingagents.agents.utils.market_scanner_tools import (
+    get_discovery_market_snapshot,
+)
+from tradingagents.agents.utils.github_research_tools import (
+    get_popular_financial_ai_repos,
+)
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
@@ -175,6 +181,12 @@ class TradingAgentsGraph:
                     get_indicators,
                 ]
             ),
+            "stock_discovery": ToolNode(
+                [
+                    get_discovery_market_snapshot,
+                    get_global_news,
+                ]
+            ),
             "social": ToolNode(
                 [
                     # News tools for social media analysis
@@ -217,6 +229,11 @@ class TradingAgentsGraph:
                     get_institutional_holders,
                     get_sec_disclosure_filings,
                     get_insider_transactions,
+                ]
+            ),
+            "github_research": ToolNode(
+                [
+                    get_popular_financial_ai_repos,
                 ]
             ),
         }
@@ -399,6 +416,7 @@ class TradingAgentsGraph:
         return {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "stock_discovery_report": final_state.get("stock_discovery_report", ""),
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],
@@ -406,7 +424,14 @@ class TradingAgentsGraph:
             "current_news_report": final_state.get("current_news_report", ""),
             "strategy_report": final_state.get("strategy_report", ""),
             "copy_trading_report": final_state.get("copy_trading_report", ""),
+            "github_research_report": final_state.get("github_research_report", ""),
             "research_department_report": final_state.get("research_department_report", ""),
+            "investment_committee_report": final_state.get("investment_committee_report", ""),
+            "trading_desk_report": final_state.get("trading_desk_report", ""),
+            "risk_office_report": final_state.get("risk_office_report", ""),
+            "portfolio_office_report": final_state.get("portfolio_office_report", ""),
+            "operations_compliance_report": final_state.get("operations_compliance_report", ""),
+            "evaluation_report": final_state.get("evaluation_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],
@@ -491,13 +516,21 @@ class TradingAgentsGraph:
         reports_dir.mkdir(parents=True, exist_ok=True)
         report_map = {
             "market_report.md": final_state.get("market_report", ""),
+            "stock_discovery_report.md": final_state.get("stock_discovery_report", ""),
             "sentiment_report.md": final_state.get("sentiment_report", ""),
             "news_report.md": final_state.get("news_report", ""),
             "fundamentals_report.md": final_state.get("fundamentals_report", ""),
             "current_news_report.md": final_state.get("current_news_report", ""),
             "strategy_report.md": final_state.get("strategy_report", ""),
             "copy_trading_report.md": final_state.get("copy_trading_report", ""),
+            "github_research_report.md": final_state.get("github_research_report", ""),
             "research_department_report.md": final_state.get("research_department_report", ""),
+            "investment_committee_report.md": final_state.get("investment_committee_report", ""),
+            "trading_desk_report.md": final_state.get("trading_desk_report", ""),
+            "risk_office_report.md": final_state.get("risk_office_report", ""),
+            "portfolio_office_report.md": final_state.get("portfolio_office_report", ""),
+            "operations_compliance_report.md": final_state.get("operations_compliance_report", ""),
+            "evaluation_report.md": final_state.get("evaluation_report", ""),
             "investment_plan.md": final_state.get("investment_plan", ""),
             "trader_investment_plan.md": final_state.get("trader_investment_plan", ""),
             "final_trade_decision.md": final_state.get("final_trade_decision", ""),

@@ -45,8 +45,18 @@ class AlpacaPaperBroker(PaperBroker):
             "qty": order.quantity,
             "side": order.side.lower(),
             "type": order.order_type.lower(),
-            "time_in_force": "day",
+            "time_in_force": order.time_in_force.lower(),
         }
+        if order.order_class:
+            payload["order_class"] = order.order_class
+        if order.take_profit_limit_price is not None:
+            payload["take_profit"] = {
+                "limit_price": round(float(order.take_profit_limit_price), 2)
+            }
+        if order.stop_loss_stop_price is not None:
+            payload["stop_loss"] = {
+                "stop_price": round(float(order.stop_loss_stop_price), 2)
+            }
         resp = requests.post(
             f"{self.base_url}/v2/orders",
             headers=self._headers(),

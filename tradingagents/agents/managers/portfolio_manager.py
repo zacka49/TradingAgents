@@ -32,6 +32,9 @@ def create_portfolio_manager(llm):
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
         research_department_report = state.get("research_department_report", "")
+        investment_committee_report = state.get("investment_committee_report", "")
+        trading_desk_report = state.get("trading_desk_report", "")
+        risk_office_report = state.get("risk_office_report", "")
 
         past_context = state.get("past_context", "")
         lessons_line = (
@@ -57,6 +60,9 @@ def create_portfolio_manager(llm):
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
 - AI research department brief: {research_department_report}
+- Investment Committee memo: {investment_committee_report}
+- Trading Desk plan: {trading_desk_report}
+- Independent Risk Office memo: {risk_office_report}
 {lessons_line}
 **Risk Analysts Debate History:**
 {history}

@@ -48,6 +48,7 @@ class Propagator:
                     "count": 0,
                 }
             ),
+            "stock_discovery_report": "",
             "market_report": "",
             "fundamentals_report": "",
             "sentiment_report": "",
@@ -55,7 +56,14 @@ class Propagator:
             "current_news_report": "",
             "strategy_report": "",
             "copy_trading_report": "",
+            "github_research_report": "",
             "research_department_report": "",
+            "investment_committee_report": "",
+            "trading_desk_report": "",
+            "risk_office_report": "",
+            "portfolio_office_report": "",
+            "operations_compliance_report": "",
+            "evaluation_report": "",
         }
 
     def get_graph_args(self, callbacks: Optional[List] = None) -> Dict[str, Any]:

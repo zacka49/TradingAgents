@@ -27,19 +27,47 @@ Value:
 Objective: Add specialized teams that contribute targeted alpha signals.
 
 Implemented sub-teams:
-1. Current News Scout:
+1. Stock Discovery Researcher:
+   - Pre-market 10-stock watchlist for the rest of the business to consider
+2. Current News Scout:
    - Company, sector, macro, regulatory, and earnings-adjacent catalysts
-2. Strategy Researcher:
+3. Strategy Researcher:
    - Testable strategy candidates with triggers, confirmations, invalidation, and paper-test notes
-3. Copy Trading Researcher:
+4. Copy Trading Researcher:
    - Politician trades, SEC disclosure filings, insider transactions, and large-holder snapshots
-4. Research Director:
+5. GitHub Researcher:
+   - Popular open-source financial AI, trading, data, agent, and backtesting repo lessons
+6. Research Director:
    - CEO-ready synthesis that feeds the bull/bear debate, trader, risk desk, and portfolio manager
 
 Next evaluation steps:
 1. Track decision impact via artifact-level A/B cohorts.
 2. Add richer politician data providers if a stable free API is selected.
-3. Add strategy backtest scoring so Strategy Researcher ideas can be promoted or retired quantitatively.
+3. Use GitHub Researcher findings to prioritize optional OpenBB, vectorized backtest, and monitoring prototypes.
+4. Add strategy backtest scoring so Strategy Researcher ideas can be promoted or retired quantitatively.
+
+## Phase 6: Business Department Expansion (Now Implemented)
+
+Objective: Expand the rest of the company into specialist AI departments with clear hand-offs, like the research department.
+
+Implemented departments:
+1. Investment Committee:
+   - Chief Investment Officer reviews research before the Trader acts
+2. Trading Desk:
+   - Trading Desk Strategist translates trader intent into execution guidance
+3. Risk Office:
+   - Risk Office Guardian frames stress scenarios and guardrails before risk debate
+4. Portfolio Office:
+   - Portfolio Office Allocator turns the final decision into allocation guidance
+5. Operations and Compliance:
+   - Operations Compliance Auditor checks data freshness, disclosure lag, and readiness
+6. Evaluation Department:
+   - Evaluation Analyst defines benchmarks, metrics, A/B tests, and learning notes
+
+Next hardening steps:
+1. Split each department into multiple debating specialists once baseline costs are understood.
+2. Add deterministic policy checks beside each AI memo so hard limits cannot be waived by language.
+3. Store department-level scores in run artifacts for A/B evaluation across model/provider choices.
 
 ## Phase 3: Portfolio Construction + Risk Controls
 

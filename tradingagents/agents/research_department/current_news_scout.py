@@ -12,6 +12,7 @@ def create_current_news_scout(llm):
     def current_news_node(state):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
+        stock_discovery_report = state.get("stock_discovery_report", "")
         tools = [get_news, get_global_news]
 
         system_message = (
@@ -33,7 +34,8 @@ def create_current_news_scout(llm):
                     "Use the provided tools to progress toward the research deliverable. "
                     "You have access to the following tools: {tool_names}.\n"
                     "{system_message}\nFor your reference, the current date is "
-                    "{current_date}. {instrument_context}",
+                    "{current_date}. {instrument_context}\n\nPre-market stock "
+                    "discovery brief:\n{stock_discovery_report}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -43,6 +45,7 @@ def create_current_news_scout(llm):
         prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
+        prompt = prompt.partial(stock_discovery_report=stock_discovery_report)
 
         chain = prompt | llm.bind_tools(tools)
         result = chain.invoke(state["messages"])

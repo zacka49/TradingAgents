@@ -1,0 +1,4 @@
+interface:
+  display_name: "Financial AI Technology Scout"
+  short_description: "Scout financial AI systems."
+  default_prompt: "Use this skill to research financial AI, trading infrastructure, agent frameworks, and practical workflow upgrades."

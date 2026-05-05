@@ -11,8 +11,18 @@ from .researchers.bull_researcher import create_bull_researcher
 from .research_department import (
     create_copy_trading_researcher,
     create_current_news_scout,
+    create_github_researcher,
     create_research_director,
+    create_stock_discovery_researcher,
     create_strategy_researcher,
+)
+from .business_departments import (
+    create_chief_investment_officer,
+    create_evaluation_analyst,
+    create_operations_compliance_auditor,
+    create_portfolio_office_allocator,
+    create_risk_office_guardian,
+    create_trading_desk_strategist,
 )
 
 from .risk_mgmt.aggressive_debator import create_aggressive_debator
@@ -29,12 +39,19 @@ __all__ = [
     "create_msg_delete",
     "InvestDebateState",
     "RiskDebateState",
+    "create_chief_investment_officer",
     "create_copy_trading_researcher",
     "create_current_news_scout",
+    "create_github_researcher",
+    "create_evaluation_analyst",
+    "create_operations_compliance_auditor",
+    "create_portfolio_office_allocator",
     "create_bear_researcher",
     "create_bull_researcher",
     "create_research_director",
     "create_research_manager",
+    "create_risk_office_guardian",
+    "create_stock_discovery_researcher",
     "create_strategy_researcher",
     "create_fundamentals_analyst",
     "create_market_analyst",
@@ -44,5 +61,6 @@ __all__ = [
     "create_portfolio_manager",
     "create_conservative_debator",
     "create_social_media_analyst",
+    "create_trading_desk_strategist",
     "create_trader",
 ]

@@ -47,6 +47,13 @@ class GraphSetup:
         analyst_nodes = {}
         delete_nodes = {}
         tool_nodes = {}
+        stock_discovery_enabled = self.config.get("stock_discovery_enabled", True)
+
+        if stock_discovery_enabled:
+            stock_discovery_node = create_stock_discovery_researcher(
+                self.quick_thinking_llm
+            )
+            stock_discovery_delete_node = create_msg_delete()
 
         if "market" in selected_analysts:
             analyst_nodes["market"] = create_market_analyst(
@@ -78,6 +85,7 @@ class GraphSetup:
 
         # Create researcher and manager nodes
         research_department_enabled = self.config.get("research_department_enabled", True)
+        github_research_enabled = self.config.get("github_research_enabled", True)
         if research_department_enabled:
             current_news_scout_node = create_current_news_scout(
                 self.quick_thinking_llm
@@ -88,6 +96,10 @@ class GraphSetup:
             copy_trading_researcher_node = create_copy_trading_researcher(
                 self.quick_thinking_llm
             )
+            if github_research_enabled:
+                github_researcher_node = create_github_researcher(
+                    self.quick_thinking_llm
+                )
             research_director_node = create_research_director(
                 self.deep_thinking_llm
             )
@@ -95,12 +107,34 @@ class GraphSetup:
                 "current_news": create_msg_delete(),
                 "strategy": create_msg_delete(),
                 "copy_trading": create_msg_delete(),
+                "github_research": create_msg_delete(),
             }
 
         bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
         bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
         research_manager_node = create_research_manager(self.deep_thinking_llm)
         trader_node = create_trader(self.quick_thinking_llm)
+
+        business_departments_enabled = self.config.get("business_departments_enabled", True)
+        if business_departments_enabled:
+            chief_investment_officer_node = create_chief_investment_officer(
+                self.deep_thinking_llm
+            )
+            trading_desk_node = create_trading_desk_strategist(
+                self.quick_thinking_llm
+            )
+            risk_office_node = create_risk_office_guardian(
+                self.quick_thinking_llm
+            )
+            portfolio_office_node = create_portfolio_office_allocator(
+                self.quick_thinking_llm
+            )
+            operations_compliance_node = create_operations_compliance_auditor(
+                self.quick_thinking_llm
+            )
+            evaluation_node = create_evaluation_analyst(
+                self.quick_thinking_llm
+            )
 
         # Create risk analysis nodes
         aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
@@ -110,6 +144,11 @@ class GraphSetup:
 
         # Create workflow
         workflow = StateGraph(AgentState)
+
+        if stock_discovery_enabled:
+            workflow.add_node("Stock Discovery Researcher", stock_discovery_node)
+            workflow.add_node("Msg Clear Stock Discovery", stock_discovery_delete_node)
+            workflow.add_node("tools_stock_discovery", self.tool_nodes["stock_discovery"])
 
         # Add analyst nodes to the graph
         for analyst_type, node in analyst_nodes.items():
@@ -123,6 +162,8 @@ class GraphSetup:
             workflow.add_node("Current News Scout", current_news_scout_node)
             workflow.add_node("Strategy Researcher", strategy_researcher_node)
             workflow.add_node("Copy Trading Researcher", copy_trading_researcher_node)
+            if github_research_enabled:
+                workflow.add_node("GitHub Researcher", github_researcher_node)
             workflow.add_node("Research Director", research_director_node)
             workflow.add_node(
                 "Msg Clear Current News",
@@ -136,14 +177,28 @@ class GraphSetup:
                 "Msg Clear Copy Trading",
                 research_department_delete_nodes["copy_trading"],
             )
+            if github_research_enabled:
+                workflow.add_node(
+                    "Msg Clear GitHub Research",
+                    research_department_delete_nodes["github_research"],
+                )
             workflow.add_node("tools_current_news", self.tool_nodes["current_news"])
             workflow.add_node("tools_strategy", self.tool_nodes["strategy"])
             workflow.add_node("tools_copy_trading", self.tool_nodes["copy_trading"])
+            if github_research_enabled:
+                workflow.add_node("tools_github_research", self.tool_nodes["github_research"])
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
+        if business_departments_enabled:
+            workflow.add_node("Chief Investment Officer", chief_investment_officer_node)
+            workflow.add_node("Trading Desk Strategist", trading_desk_node)
+            workflow.add_node("Risk Office Guardian", risk_office_node)
+            workflow.add_node("Portfolio Office Allocator", portfolio_office_node)
+            workflow.add_node("Operations Compliance Auditor", operations_compliance_node)
+            workflow.add_node("Evaluation Analyst", evaluation_node)
         workflow.add_node("Trader", trader_node)
         workflow.add_node("Aggressive Analyst", aggressive_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
@@ -151,9 +206,20 @@ class GraphSetup:
         workflow.add_node("Portfolio Manager", portfolio_manager_node)
 
         # Define edges
-        # Start with the first analyst
         first_analyst = selected_analysts[0]
-        workflow.add_edge(START, f"{first_analyst.capitalize()} Analyst")
+        first_analyst_node = f"{first_analyst.capitalize()} Analyst"
+
+        if stock_discovery_enabled:
+            workflow.add_edge(START, "Stock Discovery Researcher")
+            workflow.add_conditional_edges(
+                "Stock Discovery Researcher",
+                self.conditional_logic.should_continue_stock_discovery,
+                ["tools_stock_discovery", "Msg Clear Stock Discovery"],
+            )
+            workflow.add_edge("tools_stock_discovery", "Stock Discovery Researcher")
+            workflow.add_edge("Msg Clear Stock Discovery", first_analyst_node)
+        else:
+            workflow.add_edge(START, first_analyst_node)
 
         # Connect analysts in sequence
         for i, analyst_type in enumerate(selected_analysts):
@@ -202,7 +268,17 @@ class GraphSetup:
                 ["tools_copy_trading", "Msg Clear Copy Trading"],
             )
             workflow.add_edge("tools_copy_trading", "Copy Trading Researcher")
-            workflow.add_edge("Msg Clear Copy Trading", "Research Director")
+            if github_research_enabled:
+                workflow.add_edge("Msg Clear Copy Trading", "GitHub Researcher")
+                workflow.add_conditional_edges(
+                    "GitHub Researcher",
+                    self.conditional_logic.should_continue_github_research,
+                    ["tools_github_research", "Msg Clear GitHub Research"],
+                )
+                workflow.add_edge("tools_github_research", "GitHub Researcher")
+                workflow.add_edge("Msg Clear GitHub Research", "Research Director")
+            else:
+                workflow.add_edge("Msg Clear Copy Trading", "Research Director")
             workflow.add_edge("Research Director", "Bull Researcher")
 
         workflow.add_conditional_edges(
@@ -221,8 +297,15 @@ class GraphSetup:
                 "Research Manager": "Research Manager",
             },
         )
-        workflow.add_edge("Research Manager", "Trader")
-        workflow.add_edge("Trader", "Aggressive Analyst")
+        if business_departments_enabled:
+            workflow.add_edge("Research Manager", "Chief Investment Officer")
+            workflow.add_edge("Chief Investment Officer", "Trader")
+            workflow.add_edge("Trader", "Trading Desk Strategist")
+            workflow.add_edge("Trading Desk Strategist", "Risk Office Guardian")
+            workflow.add_edge("Risk Office Guardian", "Aggressive Analyst")
+        else:
+            workflow.add_edge("Research Manager", "Trader")
+            workflow.add_edge("Trader", "Aggressive Analyst")
         workflow.add_conditional_edges(
             "Aggressive Analyst",
             self.conditional_logic.should_continue_risk_analysis,
@@ -248,6 +331,12 @@ class GraphSetup:
             },
         )
 
-        workflow.add_edge("Portfolio Manager", END)
+        if business_departments_enabled:
+            workflow.add_edge("Portfolio Manager", "Portfolio Office Allocator")
+            workflow.add_edge("Portfolio Office Allocator", "Operations Compliance Auditor")
+            workflow.add_edge("Operations Compliance Auditor", "Evaluation Analyst")
+            workflow.add_edge("Evaluation Analyst", END)
+        else:
+            workflow.add_edge("Portfolio Manager", END)
 
         return workflow

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Day Trading Research"
+  short_description: "Research and operationalize day-trading strategy playbooks."
+  default_prompt: "Use this skill to research day-trading strategies, update the trading business knowledge base, and apply paper-trading risk controls."

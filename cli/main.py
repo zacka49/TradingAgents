@@ -44,16 +44,24 @@ app = typer.Typer(
 class MessageBuffer:
     # Fixed teams that always run (not user-selectable)
     FIXED_AGENTS = {
+        "Pre-Market Research": [
+            "Stock Discovery Researcher",
+        ],
         "Research Department": [
             "Current News Scout",
             "Strategy Researcher",
             "Copy Trading Researcher",
             "Research Director",
         ],
+        "Investment Committee": ["Chief Investment Officer"],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
-        "Trading Team": ["Trader"],
+        "Trading Desk": ["Trader", "Trading Desk Strategist"],
+        "Risk Office": ["Risk Office Guardian"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
         "Portfolio Management": ["Portfolio Manager"],
+        "Portfolio Office": ["Portfolio Office Allocator"],
+        "Operations": ["Operations Compliance Auditor"],
+        "Evaluation": ["Evaluation Analyst"],
     }
 
     # Analyst name mapping
@@ -68,6 +76,7 @@ class MessageBuffer:
     # analyst_key: which analyst selection controls this section (None = always included)
     # finalizing_agent: which agent must be "completed" for this report to count as done
     REPORT_SECTIONS = {
+        "stock_discovery_report": (None, "Stock Discovery Researcher"),
         "market_report": ("market", "Market Analyst"),
         "sentiment_report": ("social", "Social Analyst"),
         "news_report": ("news", "News Analyst"),
@@ -77,8 +86,14 @@ class MessageBuffer:
         "copy_trading_report": (None, "Copy Trading Researcher"),
         "research_department_report": (None, "Research Director"),
         "investment_plan": (None, "Research Manager"),
+        "investment_committee_report": (None, "Chief Investment Officer"),
         "trader_investment_plan": (None, "Trader"),
+        "trading_desk_report": (None, "Trading Desk Strategist"),
+        "risk_office_report": (None, "Risk Office Guardian"),
         "final_trade_decision": (None, "Portfolio Manager"),
+        "portfolio_office_report": (None, "Portfolio Office Allocator"),
+        "operations_compliance_report": (None, "Operations Compliance Auditor"),
+        "evaluation_report": (None, "Evaluation Analyst"),
     }
 
     def __init__(self, max_length=100):
@@ -181,6 +196,7 @@ class MessageBuffer:
             # Format the current section for display
             section_titles = {
                 "market_report": "Market Analysis",
+                "stock_discovery_report": "Stock Discovery",
                 "sentiment_report": "Social Sentiment",
                 "news_report": "News Analysis",
                 "fundamentals_report": "Fundamentals Analysis",
@@ -189,8 +205,14 @@ class MessageBuffer:
                 "copy_trading_report": "Copy Trading Research",
                 "research_department_report": "Research Department Brief",
                 "investment_plan": "Research Team Decision",
+                "investment_committee_report": "Investment Committee",
                 "trader_investment_plan": "Trading Team Plan",
+                "trading_desk_report": "Trading Desk Plan",
+                "risk_office_report": "Risk Office Memo",
                 "final_trade_decision": "Portfolio Management Decision",
+                "portfolio_office_report": "Portfolio Office Memo",
+                "operations_compliance_report": "Operations and Compliance",
+                "evaluation_report": "Evaluation Memo",
             }
             self.current_report = (
                 f"### {section_titles[latest_section]}\n{latest_content}"
@@ -201,6 +223,12 @@ class MessageBuffer:
 
     def _update_final_report(self):
         report_parts = []
+
+        if self.report_sections.get("stock_discovery_report"):
+            report_parts.append("## Pre-Market Stock Discovery")
+            report_parts.append(
+                f"### Stock Discovery Researcher\n{self.report_sections['stock_discovery_report']}"
+            )
 
         # Analyst Team Reports - use .get() to handle missing sections
         analyst_sections = ["market_report", "sentiment_report", "news_report", "fundamentals_report"]
@@ -253,15 +281,39 @@ class MessageBuffer:
             report_parts.append("## Research Team Decision")
             report_parts.append(f"{self.report_sections['investment_plan']}")
 
+        if self.report_sections.get("investment_committee_report"):
+            report_parts.append("## Investment Committee")
+            report_parts.append(f"{self.report_sections['investment_committee_report']}")
+
         # Trading Team Reports
         if self.report_sections.get("trader_investment_plan"):
             report_parts.append("## Trading Team Plan")
             report_parts.append(f"{self.report_sections['trader_investment_plan']}")
 
+        if self.report_sections.get("trading_desk_report"):
+            report_parts.append("## Trading Desk")
+            report_parts.append(f"{self.report_sections['trading_desk_report']}")
+
+        if self.report_sections.get("risk_office_report"):
+            report_parts.append("## Risk Office")
+            report_parts.append(f"{self.report_sections['risk_office_report']}")
+
         # Portfolio Management Decision
         if self.report_sections.get("final_trade_decision"):
             report_parts.append("## Portfolio Management Decision")
             report_parts.append(f"{self.report_sections['final_trade_decision']}")
+
+        if self.report_sections.get("portfolio_office_report"):
+            report_parts.append("## Portfolio Office")
+            report_parts.append(f"{self.report_sections['portfolio_office_report']}")
+
+        if self.report_sections.get("operations_compliance_report"):
+            report_parts.append("## Operations and Compliance")
+            report_parts.append(f"{self.report_sections['operations_compliance_report']}")
+
+        if self.report_sections.get("evaluation_report"):
+            report_parts.append("## Evaluation Department")
+            report_parts.append(f"{self.report_sections['evaluation_report']}")
 
         self.final_report = "\n\n".join(report_parts) if report_parts else None
 
@@ -321,6 +373,9 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
 
     # Group agents by team - filter to only include agents in agent_status
     all_teams = {
+        "Pre-Market Research": [
+            "Stock Discovery Researcher",
+        ],
         "Analyst Team": [
             "Market Analyst",
             "Social Analyst",
@@ -333,10 +388,15 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
             "Copy Trading Researcher",
             "Research Director",
         ],
+        "Investment Committee": ["Chief Investment Officer"],
         "Research Team": ["Bull Researcher", "Bear Researcher", "Research Manager"],
-        "Trading Team": ["Trader"],
+        "Trading Desk": ["Trader", "Trading Desk Strategist"],
+        "Risk Office": ["Risk Office Guardian"],
         "Risk Management": ["Aggressive Analyst", "Neutral Analyst", "Conservative Analyst"],
         "Portfolio Management": ["Portfolio Manager"],
+        "Portfolio Office": ["Portfolio Office Allocator"],
+        "Operations": ["Operations Compliance Auditor"],
+        "Evaluation": ["Evaluation Analyst"],
     }
 
     # Filter teams to only include agents that are in agent_status
@@ -515,7 +575,13 @@ def get_user_selections():
     welcome_content = f"{welcome_ascii}\n"
     welcome_content += "[bold green]TradingAgents: Multi-Agents LLM Financial Trading Framework - CLI[/bold green]\n\n"
     welcome_content += "[bold]Workflow Steps:[/bold]\n"
-    welcome_content += "I. Analyst Team → II. Research Team → III. Trader → IV. Risk Management → V. Portfolio Management\n\n"
+    welcome_content += (
+        "I. Pre-Market Discovery -> II. Analyst Team -> III. AI Research "
+        "Department -> IV. Research Team -> V. Investment Committee -> "
+        "VI. Trading Desk -> VII. Risk Office -> VIII. Risk Management -> "
+        "IX. Portfolio Management -> X. Portfolio Office -> XI. Operations "
+        "-> XII. Evaluation\n\n"
+    )
     welcome_content += (
         "[dim]Built by [Tauric Research](https://github.com/TauricResearch)[/dim]"
     )
@@ -686,8 +752,20 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
     save_path.mkdir(parents=True, exist_ok=True)
     sections = []
 
-    # 1. Analysts
-    analysts_dir = save_path / "1_analysts"
+    # 1. Pre-market stock discovery
+    if final_state.get("stock_discovery_report"):
+        discovery_dir = save_path / "1_stock_discovery"
+        discovery_dir.mkdir(exist_ok=True)
+        (discovery_dir / "watchlist.md").write_text(
+            final_state["stock_discovery_report"], encoding="utf-8"
+        )
+        sections.append(
+            "## I. Pre-Market Stock Discovery\n\n"
+            f"### Stock Discovery Researcher\n{final_state['stock_discovery_report']}"
+        )
+
+    # 2. Analysts
+    analysts_dir = save_path / "2_analysts"
     analyst_parts = []
     if final_state.get("market_report"):
         analysts_dir.mkdir(exist_ok=True)
@@ -707,10 +785,10 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
         analyst_parts.append(("Fundamentals Analyst", final_state["fundamentals_report"]))
     if analyst_parts:
         content = "\n\n".join(f"### {name}\n{text}" for name, text in analyst_parts)
-        sections.append(f"## I. Analyst Team Reports\n\n{content}")
+        sections.append(f"## II. Analyst Team Reports\n\n{content}")
 
-    # 2. AI Research Department
-    department_dir = save_path / "2_research_department"
+    # 3. AI Research Department
+    department_dir = save_path / "3_research_department"
     department_parts = []
     if final_state.get("current_news_report"):
         department_dir.mkdir(exist_ok=True)
@@ -730,11 +808,11 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
         department_parts.append(("Research Director", final_state["research_department_report"]))
     if department_parts:
         content = "\n\n".join(f"### {name}\n{text}" for name, text in department_parts)
-        sections.append(f"## II. AI Research Department\n\n{content}")
+        sections.append(f"## III. AI Research Department\n\n{content}")
 
-    # 3. Research
+    # 4. Research
     if final_state.get("investment_debate_state"):
-        research_dir = save_path / "3_research"
+        research_dir = save_path / "4_research"
         debate = final_state["investment_debate_state"]
         research_parts = []
         if debate.get("bull_history"):
@@ -751,18 +829,49 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
             research_parts.append(("Research Manager", debate["judge_decision"]))
         if research_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in research_parts)
-            sections.append(f"## III. Research Team Decision\n\n{content}")
+            sections.append(f"## IV. Research Team Decision\n\n{content}")
 
-    # 4. Trading
+    # 5. Investment Committee
+    if final_state.get("investment_committee_report"):
+        committee_dir = save_path / "5_investment_committee"
+        committee_dir.mkdir(exist_ok=True)
+        (committee_dir / "cio.md").write_text(
+            final_state["investment_committee_report"], encoding="utf-8"
+        )
+        sections.append(
+            "## V. Investment Committee\n\n"
+            f"### Chief Investment Officer\n{final_state['investment_committee_report']}"
+        )
+
+    # 6. Trading Desk
     if final_state.get("trader_investment_plan"):
-        trading_dir = save_path / "4_trading"
+        trading_dir = save_path / "6_trading_desk"
         trading_dir.mkdir(exist_ok=True)
         (trading_dir / "trader.md").write_text(final_state["trader_investment_plan"], encoding="utf-8")
-        sections.append(f"## IV. Trading Team Plan\n\n### Trader\n{final_state['trader_investment_plan']}")
+        trading_parts = [("Trader", final_state["trader_investment_plan"])]
+        if final_state.get("trading_desk_report"):
+            (trading_dir / "desk_strategy.md").write_text(
+                final_state["trading_desk_report"], encoding="utf-8"
+            )
+            trading_parts.append(("Trading Desk Strategist", final_state["trading_desk_report"]))
+        content = "\n\n".join(f"### {name}\n{text}" for name, text in trading_parts)
+        sections.append(f"## VI. Trading Desk\n\n{content}")
 
-    # 5. Risk Management
+    # 7. Risk Office
+    if final_state.get("risk_office_report"):
+        risk_office_dir = save_path / "7_risk_office"
+        risk_office_dir.mkdir(exist_ok=True)
+        (risk_office_dir / "risk_office.md").write_text(
+            final_state["risk_office_report"], encoding="utf-8"
+        )
+        sections.append(
+            "## VII. Risk Office\n\n"
+            f"### Risk Office Guardian\n{final_state['risk_office_report']}"
+        )
+
+    # 8. Risk Management
     if final_state.get("risk_debate_state"):
-        risk_dir = save_path / "5_risk"
+        risk_dir = save_path / "8_risk_management"
         risk = final_state["risk_debate_state"]
         risk_parts = []
         if risk.get("aggressive_history"):
@@ -779,14 +888,50 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
             risk_parts.append(("Neutral Analyst", risk["neutral_history"]))
         if risk_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in risk_parts)
-            sections.append(f"## V. Risk Management Team Decision\n\n{content}")
+            sections.append(f"## VIII. Risk Management Team Decision\n\n{content}")
 
-        # 6. Portfolio Manager
+        # 9. Portfolio Manager
         if risk.get("judge_decision"):
-            portfolio_dir = save_path / "6_portfolio"
+            portfolio_dir = save_path / "9_portfolio_management"
             portfolio_dir.mkdir(exist_ok=True)
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
-            sections.append(f"## VI. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
+            sections.append(f"## IX. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
+
+    # 10. Portfolio Office
+    if final_state.get("portfolio_office_report"):
+        portfolio_office_dir = save_path / "10_portfolio_office"
+        portfolio_office_dir.mkdir(exist_ok=True)
+        (portfolio_office_dir / "allocation.md").write_text(
+            final_state["portfolio_office_report"], encoding="utf-8"
+        )
+        sections.append(
+            "## X. Portfolio Office\n\n"
+            f"### Portfolio Office Allocator\n{final_state['portfolio_office_report']}"
+        )
+
+    # 11. Operations and Compliance
+    if final_state.get("operations_compliance_report"):
+        operations_dir = save_path / "11_operations_compliance"
+        operations_dir.mkdir(exist_ok=True)
+        (operations_dir / "audit.md").write_text(
+            final_state["operations_compliance_report"], encoding="utf-8"
+        )
+        sections.append(
+            "## XI. Operations and Compliance\n\n"
+            f"### Operations Compliance Auditor\n{final_state['operations_compliance_report']}"
+        )
+
+    # 12. Evaluation
+    if final_state.get("evaluation_report"):
+        evaluation_dir = save_path / "12_evaluation"
+        evaluation_dir.mkdir(exist_ok=True)
+        (evaluation_dir / "evaluation.md").write_text(
+            final_state["evaluation_report"], encoding="utf-8"
+        )
+        sections.append(
+            "## XII. Evaluation Department\n\n"
+            f"### Evaluation Analyst\n{final_state['evaluation_report']}"
+        )
 
     # Write consolidated report
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -799,7 +944,19 @@ def display_complete_report(final_state):
     console.print()
     console.print(Rule("Complete Analysis Report", style="bold green"))
 
-    # I. Analyst Team Reports
+    # I. Pre-market stock discovery
+    if final_state.get("stock_discovery_report"):
+        console.print(Panel("[bold]I. Pre-Market Stock Discovery[/bold]", border_style="cyan"))
+        console.print(
+            Panel(
+                Markdown(final_state["stock_discovery_report"]),
+                title="Stock Discovery Researcher",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
+
+    # II. Analyst Team Reports
     analysts = []
     if final_state.get("market_report"):
         analysts.append(("Market Analyst", final_state["market_report"]))
@@ -810,11 +967,11 @@ def display_complete_report(final_state):
     if final_state.get("fundamentals_report"):
         analysts.append(("Fundamentals Analyst", final_state["fundamentals_report"]))
     if analysts:
-        console.print(Panel("[bold]I. Analyst Team Reports[/bold]", border_style="cyan"))
+        console.print(Panel("[bold]II. Analyst Team Reports[/bold]", border_style="cyan"))
         for title, content in analysts:
             console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-    # II. AI Research Department
+    # III. AI Research Department
     department = []
     if final_state.get("current_news_report"):
         department.append(("Current News Scout", final_state["current_news_report"]))
@@ -825,11 +982,11 @@ def display_complete_report(final_state):
     if final_state.get("research_department_report"):
         department.append(("Research Director", final_state["research_department_report"]))
     if department:
-        console.print(Panel("[bold]II. AI Research Department[/bold]", border_style="magenta"))
+        console.print(Panel("[bold]III. AI Research Department[/bold]", border_style="magenta"))
         for title, content in department:
             console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-    # III. Research Team Reports
+    # IV. Research Team Reports
     if final_state.get("investment_debate_state"):
         debate = final_state["investment_debate_state"]
         research = []
@@ -840,16 +997,49 @@ def display_complete_report(final_state):
         if debate.get("judge_decision"):
             research.append(("Research Manager", debate["judge_decision"]))
         if research:
-            console.print(Panel("[bold]III. Research Team Decision[/bold]", border_style="magenta"))
+            console.print(Panel("[bold]IV. Research Team Decision[/bold]", border_style="magenta"))
             for title, content in research:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-    # IV. Trading Team
-    if final_state.get("trader_investment_plan"):
-        console.print(Panel("[bold]IV. Trading Team Plan[/bold]", border_style="yellow"))
-        console.print(Panel(Markdown(final_state["trader_investment_plan"]), title="Trader", border_style="blue", padding=(1, 2)))
+    # V. Investment Committee
+    if final_state.get("investment_committee_report"):
+        console.print(Panel("[bold]V. Investment Committee[/bold]", border_style="yellow"))
+        console.print(
+            Panel(
+                Markdown(final_state["investment_committee_report"]),
+                title="Chief Investment Officer",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
 
-    # V. Risk Management Team
+    # VI. Trading Desk
+    if final_state.get("trader_investment_plan"):
+        console.print(Panel("[bold]VI. Trading Desk[/bold]", border_style="yellow"))
+        console.print(Panel(Markdown(final_state["trader_investment_plan"]), title="Trader", border_style="blue", padding=(1, 2)))
+        if final_state.get("trading_desk_report"):
+            console.print(
+                Panel(
+                    Markdown(final_state["trading_desk_report"]),
+                    title="Trading Desk Strategist",
+                    border_style="blue",
+                    padding=(1, 2),
+                )
+            )
+
+    # VII. Risk Office
+    if final_state.get("risk_office_report"):
+        console.print(Panel("[bold]VII. Risk Office[/bold]", border_style="red"))
+        console.print(
+            Panel(
+                Markdown(final_state["risk_office_report"]),
+                title="Risk Office Guardian",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
+
+    # VIII. Risk Management Team
     if final_state.get("risk_debate_state"):
         risk = final_state["risk_debate_state"]
         risk_reports = []
@@ -860,14 +1050,50 @@ def display_complete_report(final_state):
         if risk.get("neutral_history"):
             risk_reports.append(("Neutral Analyst", risk["neutral_history"]))
         if risk_reports:
-            console.print(Panel("[bold]V. Risk Management Team Decision[/bold]", border_style="red"))
+            console.print(Panel("[bold]VIII. Risk Management Team Decision[/bold]", border_style="red"))
             for title, content in risk_reports:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
 
-        # VI. Portfolio Manager Decision
+        # IX. Portfolio Manager Decision
         if risk.get("judge_decision"):
-            console.print(Panel("[bold]VI. Portfolio Manager Decision[/bold]", border_style="green"))
+            console.print(Panel("[bold]IX. Portfolio Manager Decision[/bold]", border_style="green"))
             console.print(Panel(Markdown(risk["judge_decision"]), title="Portfolio Manager", border_style="blue", padding=(1, 2)))
+
+    # X. Portfolio Office
+    if final_state.get("portfolio_office_report"):
+        console.print(Panel("[bold]X. Portfolio Office[/bold]", border_style="green"))
+        console.print(
+            Panel(
+                Markdown(final_state["portfolio_office_report"]),
+                title="Portfolio Office Allocator",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
+
+    # XI. Operations and Compliance
+    if final_state.get("operations_compliance_report"):
+        console.print(Panel("[bold]XI. Operations and Compliance[/bold]", border_style="green"))
+        console.print(
+            Panel(
+                Markdown(final_state["operations_compliance_report"]),
+                title="Operations Compliance Auditor",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
+
+    # XII. Evaluation
+    if final_state.get("evaluation_report"):
+        console.print(Panel("[bold]XII. Evaluation Department[/bold]", border_style="green"))
+        console.print(
+            Panel(
+                Markdown(final_state["evaluation_report"]),
+                title="Evaluation Analyst",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
 
 
 def update_research_team_status(status):
@@ -877,8 +1103,24 @@ def update_research_team_status(status):
         message_buffer.update_agent_status(agent, status)
 
 
+def update_stock_discovery_status(message_buffer, chunk):
+    """Update pre-market stock discovery status and report."""
+    if chunk.get("stock_discovery_report"):
+        message_buffer.update_report_section(
+            "stock_discovery_report", chunk["stock_discovery_report"]
+        )
+        message_buffer.update_agent_status("Stock Discovery Researcher", "completed")
+        return
+
+    if not message_buffer.report_sections.get("stock_discovery_report"):
+        message_buffer.update_agent_status("Stock Discovery Researcher", "in_progress")
+
+
 def update_research_department_statuses(message_buffer, chunk):
     """Update statuses and reports for the AI research department."""
+    if not message_buffer.report_sections.get("stock_discovery_report"):
+        return
+
     analyst_reports_done = all(
         bool(message_buffer.report_sections.get(ANALYST_REPORT_MAP[analyst_key]))
         for analyst_key in message_buffer.selected_analysts
@@ -912,6 +1154,27 @@ def update_research_department_statuses(message_buffer, chunk):
             message_buffer.update_agent_status("Bull Researcher", "in_progress")
 
 
+def update_business_department_statuses(message_buffer, chunk):
+    """Update the expanded business departments and their hand-offs."""
+    transitions = [
+        ("investment_committee_report", "Chief Investment Officer", "Trader"),
+        ("trading_desk_report", "Trading Desk Strategist", "Risk Office Guardian"),
+        ("risk_office_report", "Risk Office Guardian", "Aggressive Analyst"),
+        ("portfolio_office_report", "Portfolio Office Allocator", "Operations Compliance Auditor"),
+        ("operations_compliance_report", "Operations Compliance Auditor", "Evaluation Analyst"),
+        ("evaluation_report", "Evaluation Analyst", None),
+    ]
+
+    for report_key, agent_name, next_agent in transitions:
+        if not chunk.get(report_key):
+            continue
+
+        message_buffer.update_report_section(report_key, chunk[report_key])
+        message_buffer.update_agent_status(agent_name, "completed")
+        if next_agent and message_buffer.agent_status.get(next_agent) == "pending":
+            message_buffer.update_agent_status(next_agent, "in_progress")
+
+
 # Ordered list of analysts for status transitions
 ANALYST_ORDER = ["market", "social", "news", "fundamentals"]
 ANALYST_AGENT_NAMES = {
@@ -939,6 +1202,9 @@ def update_analyst_statuses(message_buffer, chunk):
     - Remaining analysts without reports = pending
     - When all analysts done, set Bull Researcher to in_progress
     """
+    if not message_buffer.report_sections.get("stock_discovery_report"):
+        return
+
     selected = message_buffer.selected_analysts
     found_active = False
 
@@ -966,7 +1232,10 @@ def update_analyst_statuses(message_buffer, chunk):
 
     # When all analysts complete, transition research department to in_progress
     if not found_active and selected:
-        if message_buffer.agent_status.get("Current News Scout") == "pending":
+        if (
+            message_buffer.report_sections.get("stock_discovery_report")
+            and message_buffer.agent_status.get("Current News Scout") == "pending"
+        ):
             message_buffer.update_agent_status("Current News Scout", "in_progress")
 
 def extract_content_string(content):
@@ -1150,9 +1419,8 @@ def run_analysis(checkpoint: bool = False):
         )
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Update agent status to in_progress for the first analyst
-        first_analyst = f"{selections['analysts'][0].value.capitalize()} Analyst"
-        message_buffer.update_agent_status(first_analyst, "in_progress")
+        # Update agent status to in_progress for pre-market discovery
+        message_buffer.update_agent_status("Stock Discovery Researcher", "in_progress")
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
         # Create spinner text
@@ -1192,8 +1460,10 @@ def run_analysis(checkpoint: bool = False):
                             message_buffer.add_tool_call(tool_call.name, tool_call.args)
 
             # Update analyst statuses based on report state (runs on every chunk)
+            update_stock_discovery_status(message_buffer, chunk)
             update_analyst_statuses(message_buffer, chunk)
             update_research_department_statuses(message_buffer, chunk)
+            update_business_department_statuses(message_buffer, chunk)
 
             # Research Team - Handle Investment Debate State
             if chunk.get("investment_debate_state"):
@@ -1218,7 +1488,8 @@ def run_analysis(checkpoint: bool = False):
                         "investment_plan", f"### Research Manager Decision\n{judge}"
                     )
                     update_research_team_status("completed")
-                    message_buffer.update_agent_status("Trader", "in_progress")
+                    if message_buffer.agent_status.get("Chief Investment Officer") == "pending":
+                        message_buffer.update_agent_status("Chief Investment Officer", "in_progress")
 
             # Trading Team
             if chunk.get("trader_investment_plan"):
@@ -1227,7 +1498,8 @@ def run_analysis(checkpoint: bool = False):
                 )
                 if message_buffer.agent_status.get("Trader") != "completed":
                     message_buffer.update_agent_status("Trader", "completed")
-                    message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
+                    if message_buffer.agent_status.get("Trading Desk Strategist") == "pending":
+                        message_buffer.update_agent_status("Trading Desk Strategist", "in_progress")
 
             # Risk Management Team - Handle Risk Debate State
             if chunk.get("risk_debate_state"):
@@ -1265,6 +1537,8 @@ def run_analysis(checkpoint: bool = False):
                         message_buffer.update_agent_status("Conservative Analyst", "completed")
                         message_buffer.update_agent_status("Neutral Analyst", "completed")
                         message_buffer.update_agent_status("Portfolio Manager", "completed")
+                        if message_buffer.agent_status.get("Portfolio Office Allocator") == "pending":
+                            message_buffer.update_agent_status("Portfolio Office Allocator", "in_progress")
 
             # Update the display
             update_display(layout, stats_handler=stats_handler, start_time=start_time)
