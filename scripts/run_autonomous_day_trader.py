@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--strategy", choices=["safe", "risky", "both"], default="both")
     parser.add_argument("--interval-seconds", type=int, default=300)
+    parser.add_argument("--position-monitor-seconds", type=int, default=5)
     parser.add_argument("--run-until-close", action="store_true")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--max-wait-open-seconds", type=int, default=7200)
@@ -43,6 +44,7 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         once=bool(args.once),
         max_wait_open_seconds=args.max_wait_open_seconds,
         max_cycles=args.max_cycles,
+        position_monitor_seconds=args.position_monitor_seconds,
         results_dir=args.results_dir,
         max_deploy_usd=args.max_deploy_usd,
         max_order_notional_usd=args.max_order_notional_usd,

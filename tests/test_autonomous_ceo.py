@@ -22,6 +22,36 @@ class FakeCEOBroker:
     def get_account(self):
         return {"portfolio_value": "1000"}
 
+    def get_positions(self):
+        return {
+            "positions": [
+                {
+                    "symbol": "AAA",
+                    "qty": "2",
+                    "market_value": "200",
+                    "unrealized_pl": "4",
+                    "unrealized_plpc": "0.02",
+                    "current_price": "100",
+                }
+            ]
+        }
+
+    def get_orders(self, status="open"):
+        return {
+            "orders": [
+                {
+                    "id": "order-1",
+                    "symbol": "AAA",
+                    "side": "sell",
+                    "qty": "2",
+                    "type": "stop",
+                    "order_class": "bracket",
+                    "status": "held",
+                    "stop_price": "97",
+                }
+            ]
+        }
+
 
 class FakeRunner:
     calls = []
@@ -101,3 +131,20 @@ def test_autonomous_ceo_runs_both_profiles_without_manual_supervision():
         "risky",
     ]
     assert all(config["ceo_approval_required"] is False for config in FakeRunner.calls)
+
+
+def test_autonomous_ceo_position_monitor_summarizes_live_risk():
+    agent = AutonomousPaperCEOAgent(
+        AutonomousCEOSettings(once=True),
+        broker=FakeCEOBroker(),
+        runner_factory=lambda config, broker: FakeRunner(config, broker),
+        now_fn=lambda: datetime(2026, 5, 6, 13, 30, tzinfo=UTC),
+    )
+
+    event = agent.position_monitor_event(cycle=3, seconds_to_next_cycle=4.5)
+
+    assert event["event"] == "autonomous_ceo_position_monitor"
+    assert event["positions_count"] == 1
+    assert event["open_orders_count"] == 1
+    assert event["positions"][0]["symbol"] == "AAA"
+    assert event["open_orders"][0]["order_class"] == "bracket"

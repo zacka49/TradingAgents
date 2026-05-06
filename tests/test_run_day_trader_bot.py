@@ -23,7 +23,8 @@ def test_vs_code_launcher_defaults_run_full_bot_until_close():
     assert settings.profiles == ["safe", "risky"]
     assert settings.run_until_close is True
     assert settings.once is False
-    assert settings.interval_seconds == 60
+    assert settings.interval_seconds == launcher.DEFAULT_INTERVAL_SECONDS
+    assert settings.position_monitor_seconds == launcher.DEFAULT_POSITION_MONITOR_SECONDS
     assert settings.results_dir == str(
         launcher.REPO_ROOT / launcher.DEFAULT_RESULTS_DIR
     )
@@ -58,3 +59,20 @@ def test_vs_code_launcher_terminal_messages_are_plain_english():
     assert "safe desk finished" in message
     assert "Top live candidates: SPY, QQQ, NVDA" in message
     assert "Submitted 1 order" in message
+
+
+def test_vs_code_launcher_terminal_message_mentions_live_monitor():
+    launcher = _load_launcher_module()
+    message = launcher.terminal_message(
+        {
+            "event": "autonomous_ceo_position_monitor",
+            "positions_count": 1,
+            "open_orders_count": 2,
+            "positions": [{"symbol": "NVDA"}],
+            "seconds_to_next_cycle": 5.0,
+        }
+    )
+
+    assert "Monitoring live risk" in message
+    assert "NVDA" in message
+    assert "Next full strategy scan in 5.0s" in message

@@ -31,6 +31,7 @@ class AutonomousCEOSettings:
     once: bool = False
     max_wait_open_seconds: int = 7200
     max_cycles: int = 0
+    position_monitor_seconds: int = 5
     results_dir: str = "results/autonomous_day_trader"
     max_deploy_usd: float | None = None
     max_order_notional_usd: float | None = None
@@ -98,7 +99,7 @@ class AutonomousPaperCEOAgent:
                 sink({"event": "market_closed_stop", "clock": clock})
                 return 0
 
-            sleep_seconds = max(30, int(self.settings.interval_seconds))
+            sleep_seconds = max(5, int(self.settings.interval_seconds))
             next_close = parse_alpaca_time(clock.get("next_close"))
             if next_close is not None:
                 seconds_to_close = int((next_close - self.now_fn()).total_seconds())
@@ -113,7 +114,8 @@ class AutonomousPaperCEOAgent:
                     "next_close": clock.get("next_close"),
                 }
             )
-            self.sleep_fn(sleep_seconds)
+            if not self.monitor_positions_until_next_cycle(sleep_seconds, cycle, sink):
+                return 0
 
     def wait_until_open_or_exit(self, sink: EventSink) -> bool:
         clock = self.broker.get_clock()
@@ -199,6 +201,55 @@ class AutonomousPaperCEOAgent:
             "orders": [asdict(order) for order in result.order_plans],
         }
 
+    def monitor_positions_until_next_cycle(
+        self, sleep_seconds: int, cycle: int, sink: EventSink
+    ) -> bool:
+        monitor_seconds = max(1, int(self.settings.position_monitor_seconds))
+        deadline = self.now_fn().timestamp() + max(0, sleep_seconds)
+
+        while True:
+            remaining = deadline - self.now_fn().timestamp()
+            if remaining <= 0:
+                return True
+
+            sink(self.position_monitor_event(cycle, remaining))
+            self.sleep_fn(min(monitor_seconds, remaining))
+
+            clock = self.broker.get_clock()
+            if not clock.get("is_open"):
+                sink({"event": "market_closed_stop", "clock": clock})
+                return False
+
+    def position_monitor_event(
+        self, cycle: int, seconds_to_next_cycle: float
+    ) -> Dict[str, Any]:
+        positions = []
+        open_orders = []
+        try:
+            positions = list(self.broker.get_positions().get("positions", []))
+        except Exception as exc:
+            return {
+                "event": "autonomous_ceo_position_monitor_error",
+                "cycle": cycle,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "seconds_to_next_cycle": round(max(0.0, seconds_to_next_cycle), 1),
+            }
+        try:
+            open_orders = list(self.broker.get_orders("open").get("orders", []))
+        except Exception:
+            open_orders = []
+
+        return {
+            "event": "autonomous_ceo_position_monitor",
+            "cycle": cycle,
+            "seconds_to_next_cycle": round(max(0.0, seconds_to_next_cycle), 1),
+            "positions_count": len(positions),
+            "open_orders_count": len(open_orders),
+            "positions": summarize_positions(positions),
+            "open_orders": summarize_open_orders(open_orders),
+        }
+
     def _profile_config(self, profile: str) -> Dict[str, Any]:
         config = apply_day_trader_profile(self.base_config, profile)
         config["results_dir"] = str(Path(self.settings.results_dir) / profile)
@@ -277,6 +328,41 @@ def profile_order_events(
             }
         )
     return events
+
+
+def summarize_positions(positions: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    summary = []
+    for position in positions[:10]:
+        summary.append(
+            {
+                "symbol": position.get("symbol"),
+                "qty": position.get("qty"),
+                "market_value": position.get("market_value"),
+                "unrealized_pl": position.get("unrealized_pl"),
+                "unrealized_plpc": position.get("unrealized_plpc"),
+                "current_price": position.get("current_price"),
+            }
+        )
+    return summary
+
+
+def summarize_open_orders(orders: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    summary = []
+    for order in orders[:10]:
+        summary.append(
+            {
+                "id": order.get("id"),
+                "symbol": order.get("symbol"),
+                "side": order.get("side"),
+                "qty": order.get("qty"),
+                "type": order.get("type") or order.get("order_type"),
+                "order_class": order.get("order_class"),
+                "status": order.get("status"),
+                "limit_price": order.get("limit_price"),
+                "stop_price": order.get("stop_price"),
+            }
+        )
+    return summary
 
 
 def profiles_from_choice(choice: str) -> List[str]:

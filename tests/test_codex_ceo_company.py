@@ -307,6 +307,10 @@ def test_safe_and_risky_profiles_apply_distinct_risk_caps():
     assert risky["ceo_approval_required"] is False
     assert "opening_range_breakout_15m" in safe["day_trade_auto_strategies"]
     assert "opening_range_breakout_15m" in risky["day_trade_auto_strategies"]
+    assert safe["max_order_notional_usd"] == 1000.0
+    assert risky["max_order_notional_usd"] == 2500.0
+    assert safe["portfolio_max_deploy_usd"] == 10000.0
+    assert risky["portfolio_max_deploy_usd"] == 25000.0
     assert safe["max_order_notional_usd"] < risky["max_order_notional_usd"]
     assert safe["day_trade_min_strategy_confidence"] > risky["day_trade_min_strategy_confidence"]
     assert safe["day_trade_max_stop_loss_pct"] < risky["day_trade_max_stop_loss_pct"]

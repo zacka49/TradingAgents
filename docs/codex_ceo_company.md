@@ -48,21 +48,25 @@ Run the full market-hours autonomous loop with both day-trading profiles:
 .\.venv\Scripts\python.exe scripts\run_autonomous_day_trader.py `
   --strategy both `
   --run-until-close `
-  --interval-seconds 300 `
+  --interval-seconds 30 `
+  --position-monitor-seconds 5 `
   --results-dir results/autonomous_day_trader
 ```
 
 The loop uses Alpaca's trading clock, so it only submits paper orders while the
 US market is actually open. It starts a safe profile first, then a risky profile.
 Accepted paper orders are written to the local run artifacts and launcher logs.
+Between full strategy scans, the autonomous CEO checks open positions and open
+orders every few seconds so the terminal does not go quiet while trades are live.
 
 Strategy profiles:
 
-- `safe`: smaller orders, fewer target positions, higher confidence threshold,
+- `safe`: up to about `$1,000` per new paper order, up to 10% paper-account
+  deployment by default on a `$100k` paper account, higher confidence threshold,
   tighter stops, and blocks wider-spread/high-volatility/weak-backtest setups.
-- `risky`: larger paper order caps, more target positions, lower confidence
-  threshold, wider stops, larger take-profit brackets, and permits more momentum
-  breakouts.
+- `risky`: up to about `$2,500` per new paper order, up to 25% paper-account
+  deployment by default on a `$100k` paper account, lower confidence threshold,
+  wider stops, larger take-profit brackets, and permits more momentum breakouts.
 
 Realtime data path:
 

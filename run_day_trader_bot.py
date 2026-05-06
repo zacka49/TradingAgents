@@ -23,6 +23,8 @@ from tradingagents.company import (
 DEFAULT_UNIVERSE = "AMD,NVDA,INTC,COIN,QQQ,SPY,PLTR,MU,TSLA,HOOD"
 DEFAULT_RESULTS_DIR = "results/autonomous_day_trader"
 DEFAULT_LOG_DIR = "results/autonomous_day_trader/live_logs"
+DEFAULT_INTERVAL_SECONDS = 30
+DEFAULT_POSITION_MONITOR_SECONDS = 5
 REPO_ROOT = Path(__file__).resolve().parent
 
 
@@ -54,7 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--strategy", choices=["safe", "risky", "both"], default="both")
     parser.add_argument("--universe", default=DEFAULT_UNIVERSE)
-    parser.add_argument("--interval-seconds", type=int, default=60)
+    parser.add_argument("--interval-seconds", type=int, default=DEFAULT_INTERVAL_SECONDS)
+    parser.add_argument(
+        "--position-monitor-seconds",
+        type=int,
+        default=DEFAULT_POSITION_MONITOR_SECONDS,
+    )
     parser.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR)
     parser.add_argument("--log-dir", default=DEFAULT_LOG_DIR)
     parser.add_argument("--once", action="store_true")
@@ -78,6 +85,7 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         once=bool(args.once),
         max_wait_open_seconds=args.max_wait_open_seconds,
         max_cycles=args.max_cycles,
+        position_monitor_seconds=args.position_monitor_seconds,
         results_dir=str(resolve_repo_path(args.results_dir)),
         max_deploy_usd=args.max_deploy_usd,
         max_order_notional_usd=args.max_order_notional_usd,
@@ -118,6 +126,8 @@ def terminal_message(payload: Dict[str, Any]) -> str:
             "CEO online. I am running the Alpaca paper day trader now. "
             f"Universe: {', '.join(settings.get('universe', []))}. "
             f"Profiles: {', '.join(settings.get('profiles', []))}. "
+            f"Strategy scan every {settings.get('interval_seconds')} seconds, "
+            f"position monitor every {settings.get('position_monitor_seconds')} seconds. "
             f"Log: {payload.get('log_file')}."
         )
     if event == "waiting_for_market_open":
@@ -182,8 +192,34 @@ def terminal_message(payload: Dict[str, Any]) -> str:
         )
     if event == "autonomous_ceo_sleep":
         return (
-            f"Pausing for {payload.get('sleep_seconds')} seconds, then I will "
-            "refresh the live data and run the business again."
+            f"Deep strategy scan finished. I will run the next full scan in "
+            f"{payload.get('sleep_seconds')} seconds, while the live position "
+            "monitor keeps watching open trades."
+        )
+    if event == "autonomous_ceo_position_monitor":
+        positions_count = payload.get("positions_count", 0)
+        open_orders_count = payload.get("open_orders_count", 0)
+        if positions_count:
+            symbols = ", ".join(
+                str(position.get("symbol"))
+                for position in payload.get("positions", [])
+                if position.get("symbol")
+            )
+            return (
+                "Monitoring live risk. "
+                f"Open positions: {positions_count} ({symbols}). "
+                f"Open orders/brackets: {open_orders_count}. "
+                f"Next full strategy scan in {payload.get('seconds_to_next_cycle')}s."
+            )
+        return (
+            "Monitoring live risk. No open positions right now. "
+            f"Open orders/brackets: {open_orders_count}. "
+            f"Next full strategy scan in {payload.get('seconds_to_next_cycle')}s."
+        )
+    if event == "autonomous_ceo_position_monitor_error":
+        return (
+            "Live risk monitor could not read positions this tick: "
+            f"{payload.get('error_type')}: {payload.get('error')}."
         )
     if event == "day_trader_bot_stop":
         return f"CEO stopped cleanly with exit code {payload.get('exit_code')}."

@@ -30,7 +30,8 @@ Equivalent CEO entrypoint:
 .\.venv\Scripts\python.exe scripts\run_autonomous_ceo.py `
   --strategy both `
   --run-until-close `
-  --interval-seconds 300 `
+  --interval-seconds 30 `
+  --position-monitor-seconds 5 `
   --results-dir results/autonomous_day_trader
 ```
 
@@ -40,7 +41,8 @@ Equivalent CEO entrypoint:
 .\.venv\Scripts\python.exe scripts\run_autonomous_day_trader.py `
   --strategy both `
   --run-until-close `
-  --interval-seconds 300 `
+  --interval-seconds 30 `
+  --position-monitor-seconds 5 `
   --results-dir results/autonomous_day_trader
 ```
 
@@ -53,24 +55,27 @@ Open `run_day_trader_bot.py` in VS Code and press Run Python File, or run:
 ```
 
 This starts the autonomous CEO agent in Alpaca paper mode, runs both safe and
-risky profiles every 60 seconds while the market is open, and writes a JSONL
-session log under `results/autonomous_day_trader/live_logs/`. The same events
-also stream to the VS Code terminal in plain English, for example when the CEO
-is running research, checking strategies, reviewing risk, or placing a trade.
+risky profiles every 30 seconds while the market is open, and checks live
+positions/open orders every 5 seconds between full strategy scans. It writes a
+JSONL session log under `results/autonomous_day_trader/live_logs/`. The same
+events also stream to the VS Code terminal in plain English, for example when
+the CEO is running research, monitoring live risk, reviewing strategies, or
+placing a trade.
 
 ## Profiles
 
 `safe` minimizes loss exposure:
 
-- smaller order cap
-- fewer target positions
+- smaller order cap, currently up to about `$1,000` per new paper order
+- up to 10% paper-account deployment by default on a `$100k` account
 - higher confidence gate
 - tighter stops and tighter take-profit brackets
 - blocks high volatility, wide spreads, stale trades, and weak backtests
 
 `risky` maximizes paper upside:
 
-- larger order cap
+- larger order cap, currently up to about `$2,500` per new paper order
+- up to 25% paper-account deployment by default on a `$100k` account
 - more target positions
 - lower confidence gate
 - wider stops and larger take-profit brackets
