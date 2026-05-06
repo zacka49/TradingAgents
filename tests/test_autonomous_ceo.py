@@ -74,7 +74,6 @@ def test_autonomous_ceo_runs_both_profiles_without_manual_supervision():
             profiles=("safe", "risky"),
             universe=("AAA", "BBB"),
             once=True,
-            whatsapp_enabled=False,
         ),
         broker=FakeCEOBroker(),
         runner_factory=lambda config, broker: FakeRunner(config, broker),
@@ -83,9 +82,17 @@ def test_autonomous_ceo_runs_both_profiles_without_manual_supervision():
 
     assert agent.run(events.append) == 0
 
-    assert len(events) == 1
-    assert events[0]["event"] == "autonomous_ceo_cycle"
-    assert [profile["strategy_profile"] for profile in events[0]["profiles"]] == [
+    assert [event["event"] for event in events] == [
+        "autonomous_ceo_cycle_start",
+        "autonomous_ceo_profile_start",
+        "autonomous_ceo_profile_complete",
+        "autonomous_ceo_profile_start",
+        "autonomous_ceo_profile_complete",
+        "autonomous_ceo_cycle",
+    ]
+
+    cycle_event = events[-1]
+    assert [profile["strategy_profile"] for profile in cycle_event["profiles"]] == [
         "safe",
         "risky",
     ]

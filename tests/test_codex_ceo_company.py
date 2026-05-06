@@ -2,7 +2,6 @@ from tradingagents.company import CodexCEOCompanyRunner, MarketCandidate, apply_
 from tradingagents.agents.utils.agent_utils import get_strategy_doctrine_context
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.execution import OrderIntent, evaluate_order_policy
-from tradingagents.notifications import send_whatsapp_message
 
 
 class FakeBroker:
@@ -317,17 +316,3 @@ def test_sell_orders_do_not_require_buying_power_or_position_cap():
     assert policy.allow is True
     assert policy.reason == "approved"
 
-
-def test_whatsapp_notifications_report_missing_env(monkeypatch):
-    for name in [
-        "TWILIO_ACCOUNT_SID",
-        "TWILIO_AUTH_TOKEN",
-        "TWILIO_WHATSAPP_FROM",
-        "WHATSAPP_TO",
-    ]:
-        monkeypatch.delenv(name, raising=False)
-
-    result = send_whatsapp_message("test")
-
-    assert result.sent is False
-    assert result.reason.startswith("missing_env:")

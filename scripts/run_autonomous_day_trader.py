@@ -29,7 +29,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-order-notional-usd", type=float, default=None)
     parser.add_argument("--target-positions", type=int, default=None)
     parser.add_argument("--liquidate-non-targets", action="store_true")
-    parser.add_argument("--no-whatsapp", action="store_true")
     parser.add_argument("--with-staff-memo", action="store_true")
     parser.add_argument("--with-tech-scout", action="store_true")
     return parser
@@ -49,7 +48,6 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         max_order_notional_usd=args.max_order_notional_usd,
         target_positions=args.target_positions,
         liquidate_non_targets=bool(args.liquidate_non_targets),
-        whatsapp_enabled=not bool(args.no_whatsapp),
         ollama_staff_memo_enabled=bool(args.with_staff_memo),
         technology_scout_enabled=bool(args.with_tech_scout),
     )
@@ -63,4 +61,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

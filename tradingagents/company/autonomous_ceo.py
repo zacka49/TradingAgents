@@ -6,13 +6,12 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Sequence
+from typing import Any, Callable, Dict, List, Sequence
 
 from tradingagents.company.codex_ceo_company import CodexCEOCompanyRunner
 from tradingagents.company.strategy_profiles import apply_day_trader_profile
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.execution import AlpacaPaperBroker
-from tradingagents.notifications import send_trade_notification
 
 
 EventSink = Callable[[Dict[str, Any]], None]
@@ -37,7 +36,6 @@ class AutonomousCEOSettings:
     max_order_notional_usd: float | None = None
     target_positions: int | None = None
     liquidate_non_targets: bool = False
-    whatsapp_enabled: bool = True
     ollama_staff_memo_enabled: bool = False
     technology_scout_enabled: bool = False
 
@@ -46,8 +44,8 @@ class AutonomousPaperCEOAgent:
     """Self-running CEO agent for Alpaca paper day trading.
 
     This class owns the market-clock wait, profile orchestration, paper-trading
-    cycles, artifact logging, and trade notifications. It lets a local process
-    run the company without Codex manually supervising every cycle.
+    cycles, and artifact logging. It lets a local process run the company
+    without Codex manually supervising every cycle.
     """
 
     def __init__(
@@ -78,7 +76,17 @@ class AutonomousPaperCEOAgent:
                 return 0
 
             cycle += 1
-            sink(self.run_cycle(cycle))
+            sink(
+                {
+                    "event": "autonomous_ceo_cycle_start",
+                    "cycle": cycle,
+                    "started_at": self.now_fn().isoformat(),
+                    "profiles": list(self.settings.profiles),
+                    "universe": list(self.settings.universe),
+                    "interval_seconds": self.settings.interval_seconds,
+                }
+            )
+            sink(self.run_cycle(cycle, event_sink=sink))
 
             if self.settings.once or not self.settings.run_until_close:
                 return 0
@@ -97,6 +105,14 @@ class AutonomousPaperCEOAgent:
                 if seconds_to_close <= 0:
                     return 0
                 sleep_seconds = min(sleep_seconds, max(1, seconds_to_close))
+            sink(
+                {
+                    "event": "autonomous_ceo_sleep",
+                    "cycle": cycle,
+                    "sleep_seconds": sleep_seconds,
+                    "next_close": clock.get("next_close"),
+                }
+            )
             self.sleep_fn(sleep_seconds)
 
     def wait_until_open_or_exit(self, sink: EventSink) -> bool:
@@ -134,7 +150,9 @@ class AutonomousPaperCEOAgent:
             self.sleep_fn(min(wait_seconds, self.settings.max_wait_open_seconds))
         return bool(self.broker.get_clock().get("is_open"))
 
-    def run_cycle(self, cycle: int) -> Dict[str, Any]:
+    def run_cycle(
+        self, cycle: int, event_sink: EventSink | None = None
+    ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "event": "autonomous_ceo_cycle",
             "cycle": cycle,
@@ -142,7 +160,21 @@ class AutonomousPaperCEOAgent:
             "profiles": [],
         }
         for profile in self.settings.profiles:
-            payload["profiles"].append(self.run_profile(profile))
+            if event_sink:
+                event_sink(
+                    {
+                        "event": "autonomous_ceo_profile_start",
+                        "cycle": cycle,
+                        "strategy_profile": profile,
+                        "stage": "research_strategy_and_trade",
+                    }
+                )
+            profile_result = self.run_profile(profile)
+            payload["profiles"].append(profile_result)
+            if event_sink:
+                event_sink(profile_stage_summary(cycle, profile_result))
+                for order_event in profile_order_events(cycle, profile_result):
+                    event_sink(order_event)
         payload["finished_at"] = self.now_fn().isoformat()
         return payload
 
@@ -156,21 +188,6 @@ class AutonomousPaperCEOAgent:
             ceo_approved=True,
         )
 
-        notification_results = []
-        if self.settings.whatsapp_enabled:
-            account = self.broker.get_account()
-            for order in result.order_plans:
-                if order.submitted:
-                    notification_results.append(
-                        asdict(
-                            send_trade_notification(
-                                strategy_profile=profile,
-                                order=order,
-                                account=account,
-                            )
-                        )
-                    )
-
         return {
             "strategy_profile": profile,
             "market_open": result.market_open,
@@ -180,7 +197,6 @@ class AutonomousPaperCEOAgent:
             "submitted_orders": result.submitted_orders,
             "blocked_orders": result.blocked_orders,
             "orders": [asdict(order) for order in result.order_plans],
-            "notifications": notification_results,
         }
 
     def _profile_config(self, profile: str) -> Dict[str, Any]:
@@ -223,6 +239,46 @@ def print_json_event(payload: Dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
+def profile_stage_summary(cycle: int, profile_result: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "event": "autonomous_ceo_profile_complete",
+        "cycle": cycle,
+        "strategy_profile": profile_result["strategy_profile"],
+        "artifact_dir": profile_result["artifact_dir"],
+        "top_candidates": profile_result["top_candidates"],
+        "target_weights": profile_result["target_weights"],
+        "submitted_orders": profile_result["submitted_orders"],
+        "blocked_orders": profile_result["blocked_orders"],
+    }
+
+
+def profile_order_events(
+    cycle: int, profile_result: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    events = []
+    for order in profile_result["orders"]:
+        events.append(
+            {
+                "event": (
+                    "autonomous_ceo_trade_submitted"
+                    if order["submitted"]
+                    else "autonomous_ceo_trade_not_placed"
+                ),
+                "cycle": cycle,
+                "strategy_profile": profile_result["strategy_profile"],
+                "ticker": order["ticker"],
+                "side": order["side"],
+                "quantity": order["quantity"],
+                "estimated_notional_usd": order["estimated_notional_usd"],
+                "strategy": order.get("strategy"),
+                "submitted": order["submitted"],
+                "blocked_reason": order.get("blocked_reason"),
+                "order_response": order.get("order_response"),
+            }
+        )
+    return events
+
+
 def profiles_from_choice(choice: str) -> List[str]:
     if choice == "both":
         return ["safe", "risky"]
@@ -231,4 +287,3 @@ def profiles_from_choice(choice: str) -> List[str]:
 
 def parse_universe(raw: str) -> List[str]:
     return [item.strip().upper() for item in raw.split(",") if item.strip()]
-

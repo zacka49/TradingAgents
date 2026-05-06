@@ -54,7 +54,7 @@ Run the full market-hours autonomous loop with both day-trading profiles:
 
 The loop uses Alpaca's trading clock, so it only submits paper orders while the
 US market is actually open. It starts a safe profile first, then a risky profile.
-Every accepted paper order is sent to WhatsApp when the Twilio env vars are set.
+Accepted paper orders are written to the local run artifacts and launcher logs.
 
 Strategy profiles:
 

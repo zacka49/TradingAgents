@@ -40,3 +40,21 @@ def test_vs_code_launcher_once_mode_only_runs_one_cycle():
     assert settings.universe == ["SPY", "QQQ"]
     assert settings.run_until_close is False
     assert settings.once is True
+
+
+def test_vs_code_launcher_terminal_messages_are_plain_english():
+    launcher = _load_launcher_module()
+    message = launcher.terminal_message(
+        {
+            "event": "autonomous_ceo_profile_complete",
+            "strategy_profile": "safe",
+            "top_candidates": ["SPY", "QQQ", "NVDA"],
+            "target_weights": {"SPY": 0.08},
+            "submitted_orders": 1,
+            "blocked_orders": 0,
+        }
+    )
+
+    assert "safe desk finished" in message
+    assert "Top live candidates: SPY, QQQ, NVDA" in message
+    assert "Submitted 1 order" in message

@@ -42,8 +42,7 @@ class SessionLogger:
         wrapped = {"logged_at": logged_at, **payload}
         self._handle.write(json.dumps(wrapped, default=str) + "\n")
 
-        print(f"\n[{logged_at}] {payload.get('event', 'event')}")
-        print(json.dumps(payload, indent=2, default=str))
+        print(f"[{logged_at}] {terminal_message(payload)}")
         sys.stdout.flush()
 
 
@@ -65,7 +64,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-order-notional-usd", type=float, default=None)
     parser.add_argument("--target-positions", type=int, default=None)
     parser.add_argument("--liquidate-non-targets", action="store_true")
-    parser.add_argument("--no-whatsapp", action="store_true")
     parser.add_argument("--with-staff-memo", action="store_true")
     parser.add_argument("--with-tech-scout", action="store_true")
     return parser
@@ -85,7 +83,6 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         max_order_notional_usd=args.max_order_notional_usd,
         target_positions=args.target_positions,
         liquidate_non_targets=bool(args.liquidate_non_targets),
-        whatsapp_enabled=not bool(args.no_whatsapp),
         ollama_staff_memo_enabled=bool(args.with_staff_memo),
         technology_scout_enabled=bool(args.with_tech_scout),
     )
@@ -109,12 +106,95 @@ def env_status() -> Dict[str, bool]:
         "APCA_API_SECRET_KEY",
         "APCA_API_BASE_URL",
         "ALPACA_STOCK_FEED",
-        "TWILIO_ACCOUNT_SID",
-        "TWILIO_AUTH_TOKEN",
-        "TWILIO_WHATSAPP_FROM",
-        "WHATSAPP_TO",
     ]
     return {key: bool(os.getenv(key)) for key in keys}
+
+
+def terminal_message(payload: Dict[str, Any]) -> str:
+    event = payload.get("event")
+    if event == "day_trader_bot_start":
+        settings = payload.get("settings", {})
+        return (
+            "CEO online. I am running the Alpaca paper day trader now. "
+            f"Universe: {', '.join(settings.get('universe', []))}. "
+            f"Profiles: {', '.join(settings.get('profiles', []))}. "
+            f"Log: {payload.get('log_file')}."
+        )
+    if event == "waiting_for_market_open":
+        wait_minutes = int(payload.get("wait_seconds", 0)) // 60
+        return (
+            "Market is closed. I am waiting for the US session to open "
+            f"in about {wait_minutes} minutes."
+        )
+    if event == "market_closed_once_skip":
+        return "Market is closed, so I am not running a one-off scan."
+    if event == "market_closed_stop":
+        return "Market is closed. I am standing the trading desk down."
+    if event == "market_closed_next_open_too_far":
+        return "The next market open is too far away for this run, so I am stopping."
+    if event == "autonomous_ceo_cycle_start":
+        cycle = payload.get("cycle")
+        universe = payload.get("universe", [])
+        return (
+            f"Cycle {cycle}: running research across {len(universe)} live symbols. "
+            "I am checking price, volume, momentum, spread, and risk gates quickly."
+        )
+    if event == "autonomous_ceo_profile_start":
+        profile = payload.get("strategy_profile")
+        return (
+            f"Running {profile} strategy desk. Research, strategy selection, "
+            "risk checks, and order planning are moving now."
+        )
+    if event == "autonomous_ceo_profile_complete":
+        profile = payload.get("strategy_profile")
+        top = ", ".join(payload.get("top_candidates", [])[:5]) or "none"
+        targets = payload.get("target_weights", {})
+        if targets:
+            target_text = ", ".join(
+                f"{ticker} {float(weight):.1%}" for ticker, weight in targets.items()
+            )
+            action = f"Target book: {target_text}."
+        else:
+            action = "No clean entry cleared the gates this pass."
+        return (
+            f"{profile} desk finished. Top live candidates: {top}. {action} "
+            f"Submitted {payload.get('submitted_orders', 0)} order(s), "
+            f"blocked {payload.get('blocked_orders', 0)}."
+        )
+    if event == "autonomous_ceo_trade_submitted":
+        return (
+            "Placing trade complete. "
+            f"{str(payload.get('side', '')).upper()} {payload.get('quantity')} "
+            f"{payload.get('ticker')} for about "
+            f"${float(payload.get('estimated_notional_usd', 0)):.2f} via "
+            f"{payload.get('strategy_profile')} / {payload.get('strategy')}."
+        )
+    if event == "autonomous_ceo_trade_not_placed":
+        return (
+            "Trade desk reviewed an order but did not place it. "
+            f"{str(payload.get('side', '')).upper()} {payload.get('ticker')} "
+            f"was blocked because {payload.get('blocked_reason') or 'risk rules'}."
+        )
+    if event == "autonomous_ceo_cycle":
+        return (
+            f"Cycle {payload.get('cycle')} complete. I have written the run "
+            "artifacts and am ready for the next fast scan."
+        )
+    if event == "autonomous_ceo_sleep":
+        return (
+            f"Pausing for {payload.get('sleep_seconds')} seconds, then I will "
+            "refresh the live data and run the business again."
+        )
+    if event == "day_trader_bot_stop":
+        return f"CEO stopped cleanly with exit code {payload.get('exit_code')}."
+    if event == "day_trader_bot_interrupted_by_user":
+        return "Run interrupted from the terminal. CEO is standing down."
+    if event == "day_trader_bot_error":
+        return (
+            f"CEO hit an error: {payload.get('error_type')}: "
+            f"{payload.get('error')}. Full traceback is in the JSONL log."
+        )
+    return f"{event or 'event'}: {json.dumps(payload, default=str)}"
 
 
 def main(argv: list[str] | None = None) -> int:

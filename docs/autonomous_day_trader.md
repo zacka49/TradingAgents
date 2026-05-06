@@ -15,16 +15,6 @@ Required:
 - `ALPACA_STOCK_FEED=iex` for the free/basic real-time IEX feed, or `sip` when
   your Alpaca plan supports the consolidated feed.
 
-WhatsApp notifications:
-
-- `TWILIO_ACCOUNT_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_WHATSAPP_FROM`
-- `WHATSAPP_TO`
-
-Twilio WhatsApp senders and recipients should use E.164 numbers. The code adds
-the `whatsapp:` prefix when it is missing.
-
 ## Run Once
 
 ```powershell
@@ -65,8 +55,8 @@ Open `run_day_trader_bot.py` in VS Code and press Run Python File, or run:
 This starts the autonomous CEO agent in Alpaca paper mode, runs both safe and
 risky profiles every 60 seconds while the market is open, and writes a JSONL
 session log under `results/autonomous_day_trader/live_logs/`. The same events
-also stream to the VS Code terminal so the board can see what the business is
-doing without Codex supervising the bot.
+also stream to the VS Code terminal in plain English, for example when the CEO
+is running research, checking strategies, reviewing risk, or placing a trade.
 
 ## Profiles
 
@@ -107,4 +97,3 @@ References:
 - [Alpaca market data FAQ](https://docs.alpaca.markets/docs/market-data-faq)
 - [Alpaca latest trades endpoint](https://docs.alpaca.markets/reference/stocklatesttrades-1)
 - [Alpaca real-time stock data](https://docs.alpaca.markets/docs/real-time-stock-pricing-data)
-- [Twilio Messages API for WhatsApp](https://www.twilio.com/docs/messaging/api/message-resource)
