@@ -109,6 +109,18 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _response_text(response: Any) -> str | None:
+    if response is None:
+        return None
+    text = getattr(response, "text", None)
+    if text:
+        return str(text)[:500]
+    try:
+        return json.dumps(response.json())[:500]
+    except Exception:
+        return None
+
+
 def _pct_change(start: float, end: float) -> float:
     if start == 0:
         return 0.0
@@ -908,6 +920,10 @@ class CodexCEOCompanyRunner:
             except HTTPError as exc:
                 status = exc.response.status_code if exc.response is not None else "unknown"
                 plan.blocked_reason = f"submit_failed_http_{status}"
+                plan.order_response = {
+                    "error": _response_text(exc.response),
+                    "status_code": status,
+                }
             except Exception as exc:
                 plan.blocked_reason = f"submit_failed_{type(exc).__name__}"
 
@@ -918,7 +934,15 @@ class CodexCEOCompanyRunner:
             return
         plan.latest_price = round(price, 4)
         if plan.side == "buy":
-            plan.quantity = round(plan.estimated_notional_usd / plan.latest_price, 4)
+            if (
+                bool(self.config.get("use_bracket_orders", True))
+                and plan.take_profit_pct
+                and plan.stop_loss_pct
+            ):
+                plan.quantity = math.floor(plan.quantity)
+            else:
+                plan.quantity = round(plan.estimated_notional_usd / plan.latest_price, 4)
+            plan.estimated_notional_usd = round(plan.quantity * plan.latest_price, 2)
         else:
             plan.estimated_notional_usd = round(plan.quantity * plan.latest_price, 2)
         if plan.side == "buy" and plan.stop_loss_pct and plan.take_profit_pct:

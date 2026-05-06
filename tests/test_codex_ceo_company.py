@@ -5,6 +5,9 @@ from tradingagents.execution import OrderIntent, evaluate_order_policy
 
 
 class FakeBroker:
+    def __init__(self):
+        self.submitted_orders = []
+
     def get_account(self):
         return {
             "status": "ACTIVE",
@@ -24,6 +27,7 @@ class FakeBroker:
         return {"p": 50 if symbol == "AAA" else 25}
 
     def submit_order(self, order):
+        self.submitted_orders.append(order)
         return {
             "id": f"order-{order.ticker}",
             "symbol": order.ticker,
@@ -31,6 +35,20 @@ class FakeBroker:
             "qty": str(order.quantity),
             "status": "accepted",
         }
+
+
+class FakePLTRBroker(FakeBroker):
+    def get_account(self):
+        return {
+            "status": "ACTIVE",
+            "equity": "2000",
+            "buying_power": "2000",
+            "cash": "2000",
+            "portfolio_value": "2000",
+        }
+
+    def get_latest_trade(self, symbol):
+        return {"p": 134.13}
 
 
 def _candidate(ticker, price, score):
@@ -159,6 +177,51 @@ def test_bracket_buy_order_quantities_are_whole_shares():
 
     assert plans[0].quantity == 1
     assert plans[0].estimated_notional_usd == 201
+
+
+def test_live_price_refresh_keeps_bracket_buy_quantities_whole_shares():
+    broker = FakePLTRBroker()
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_max_deploy_usd": 1600,
+            "portfolio_min_order_notional_usd": 10,
+            "max_order_notional_usd": 350,
+            "max_position_notional_usd": 500,
+            "enforce_market_open": True,
+            "ceo_approval_required": False,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+            "use_bracket_orders": True,
+            "refresh_live_prices_before_submit": True,
+        },
+        broker=broker,
+    )
+    plans = runner.build_order_plans(
+        candidates=[_candidate("PLTR", 134.1, 10)],
+        target_weights={"PLTR": 0.17},
+        account=broker.get_account(),
+        positions=[],
+    )
+
+    assert plans[0].quantity == 2
+
+    runner.apply_order_plans(
+        plans,
+        account=broker.get_account(),
+        market_open=True,
+        submit=True,
+        ceo_approved=True,
+    )
+
+    assert plans[0].submitted is True
+    assert plans[0].quantity == 2
+    assert plans[0].estimated_notional_usd == 268.26
+    assert broker.submitted_orders[0].quantity == 2
 
 
 def test_codex_ceo_company_submits_when_approved():
@@ -315,4 +378,3 @@ def test_sell_orders_do_not_require_buying_power_or_position_cap():
 
     assert policy.allow is True
     assert policy.reason == "approved"
-
