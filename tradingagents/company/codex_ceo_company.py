@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timezone
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence
 from zoneinfo import ZoneInfo
@@ -755,6 +756,16 @@ class CodexCEOCompanyRunner:
             if side == "buy" and ticker in open_sell_symbols:
                 continue
             quantity = abs(delta) / candidate.latest_price
+            if (
+                side == "buy"
+                and bool(self.config.get("use_bracket_orders", True))
+                and candidate.take_profit_pct
+                and candidate.stop_loss_pct
+            ):
+                quantity = math.floor(quantity)
+                delta = quantity * candidate.latest_price
+                if delta < min_order_notional:
+                    continue
             if side == "sell":
                 current_qty = abs(_safe_float(position_by_ticker.get(ticker, {}).get("qty")))
                 quantity = min(quantity, current_qty)

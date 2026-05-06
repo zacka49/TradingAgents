@@ -1,8 +1,9 @@
 # Autonomous Paper Day Trader
 
-This runner is paper-only. It submits Alpaca paper orders without per-trade
-approval, but it still enforces the Alpaca market clock, order caps, buying
-power, duplicate-open-order suppression, and bracket exits.
+This runner is paper-only. The self-running CEO agent in
+`tradingagents/company/autonomous_ceo.py` submits Alpaca paper orders without
+per-trade approval, but it still enforces the Alpaca market clock, order caps,
+buying power, duplicate-open-order suppression, and bracket exits.
 
 ## Environment
 
@@ -30,6 +31,16 @@ the `whatsapp:` prefix when it is missing.
 .\.venv\Scripts\python.exe scripts\run_autonomous_day_trader.py `
   --strategy both `
   --once `
+  --results-dir results/autonomous_day_trader
+```
+
+Equivalent CEO entrypoint:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_autonomous_ceo.py `
+  --strategy both `
+  --run-until-close `
+  --interval-seconds 300 `
   --results-dir results/autonomous_day_trader
 ```
 

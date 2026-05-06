@@ -133,6 +133,35 @@ def test_open_buy_orders_count_against_target_allocation():
     assert plans == []
 
 
+def test_bracket_buy_order_quantities_are_whole_shares():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_max_deploy_usd": 1000,
+            "portfolio_min_order_notional_usd": 10,
+            "max_order_notional_usd": 250,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+            "use_bracket_orders": True,
+        },
+        broker=FakeBroker(),
+    )
+    candidates = [_candidate("AAA", 201, 10)]
+    plans = runner.build_order_plans(
+        candidates=candidates,
+        target_weights=runner.build_target_weights(candidates),
+        account=runner.broker.get_account(),
+        positions=[],
+    )
+
+    assert plans[0].quantity == 1
+    assert plans[0].estimated_notional_usd == 201
+
+
 def test_codex_ceo_company_submits_when_approved():
     runner = CodexCEOCompanyRunner(
         {
