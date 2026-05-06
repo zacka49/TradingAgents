@@ -12,6 +12,9 @@ from tradingagents.company import (
 
 
 class FakeCEOBroker:
+    def __init__(self):
+        self.closed_positions = []
+
     def get_clock(self):
         return {
             "is_open": True,
@@ -51,6 +54,11 @@ class FakeCEOBroker:
                 }
             ]
         }
+
+    def close_all_positions(self, cancel_orders=True):
+        payload = {"cancel_orders": cancel_orders, "status": "requested"}
+        self.closed_positions.append(payload)
+        return payload
 
 
 class FakeRunner:
@@ -148,3 +156,29 @@ def test_autonomous_ceo_position_monitor_summarizes_live_risk():
     assert event["open_orders_count"] == 1
     assert event["positions"][0]["symbol"] == "AAA"
     assert event["open_orders"][0]["order_class"] == "bracket"
+
+
+def test_autonomous_ceo_flattens_in_pre_close_window():
+    broker = FakeCEOBroker()
+    events = []
+    agent = AutonomousPaperCEOAgent(
+        AutonomousCEOSettings(
+            once=False,
+            run_until_close=True,
+            flatten_at_close=True,
+            flatten_minutes_before_close=5,
+        ),
+        broker=broker,
+        runner_factory=lambda config, broker: FakeRunner(config, broker),
+        now_fn=lambda: datetime(2026, 5, 6, 19, 56, tzinfo=UTC),
+    )
+
+    assert agent.run(events.append) == 0
+
+    assert broker.closed_positions == [
+        {"cancel_orders": True, "status": "requested"}
+    ]
+    assert [event["event"] for event in events] == [
+        "autonomous_ceo_eod_flatten_start",
+        "autonomous_ceo_eod_flatten_complete",
+    ]

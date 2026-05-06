@@ -32,6 +32,15 @@ SAFE_DAY_TRADER_PROFILE: Dict[str, Any] = {
     ],
     "backtest_lab_gate_targets": True,
     "realtime_score_minimum": 0.40,
+    "codex_ceo_news_political_scan_enabled": True,
+    "codex_ceo_news_political_max_symbols": 60,
+    "codex_ceo_realtime_lookback_minutes": 120,
+    "codex_ceo_order_flow_enrichment_limit": 8,
+    "day_trader_flatten_at_close": True,
+    "day_trader_flatten_minutes_before_close": 5,
+    "day_trader_stop_new_entries_minutes_before_close": 15,
+    "day_trader_flatten_on_max_cycles": True,
+    "day_trader_cancel_orders_before_flatten": True,
     "use_bracket_orders": True,
 }
 
@@ -63,6 +72,15 @@ RISKY_DAY_TRADER_PROFILE: Dict[str, Any] = {
     ],
     "backtest_lab_gate_targets": False,
     "realtime_score_minimum": 0.15,
+    "codex_ceo_news_political_scan_enabled": True,
+    "codex_ceo_news_political_max_symbols": 60,
+    "codex_ceo_realtime_lookback_minutes": 120,
+    "codex_ceo_order_flow_enrichment_limit": 10,
+    "day_trader_flatten_at_close": True,
+    "day_trader_flatten_minutes_before_close": 5,
+    "day_trader_stop_new_entries_minutes_before_close": 15,
+    "day_trader_flatten_on_max_cycles": True,
+    "day_trader_cancel_orders_before_flatten": True,
     "use_bracket_orders": True,
 }
 

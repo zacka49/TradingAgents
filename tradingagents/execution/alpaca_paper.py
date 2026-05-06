@@ -99,6 +99,25 @@ class AlpacaPaperBroker(PaperBroker):
         resp.raise_for_status()
         return {"orders": resp.json()}
 
+    def cancel_all_orders(self) -> Dict[str, Any]:
+        resp = requests.delete(
+            f"{self.base_url}/v2/orders",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return {"orders": resp.json()}
+
+    def close_all_positions(self, cancel_orders: bool = True) -> Dict[str, Any]:
+        resp = requests.delete(
+            f"{self.base_url}/v2/positions",
+            headers=self._headers(),
+            params={"cancel_orders": str(bool(cancel_orders)).lower()},
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return {"positions": resp.json()}
+
     def get_clock(self) -> Dict[str, Any]:
         resp = requests.get(
             f"{self.base_url}/v2/clock",
@@ -108,11 +127,11 @@ class AlpacaPaperBroker(PaperBroker):
         resp.raise_for_status()
         return resp.json()
 
-    def get_latest_trade(self, symbol: str) -> Dict[str, Any]:
+    def get_latest_trade(self, symbol: str, feed: str | None = None) -> Dict[str, Any]:
         resp = requests.get(
             f"https://data.alpaca.markets/v2/stocks/{symbol}/trades/latest",
             headers=self._headers(),
-            params={"feed": os.getenv("ALPACA_STOCK_FEED", "iex")},
+            params={"feed": feed or os.getenv("ALPACA_STOCK_FEED", "iex")},
             timeout=self.timeout,
         )
         resp.raise_for_status()

@@ -79,6 +79,13 @@ Trading Strategy Doctrine:
   are watch/research modes unless backtests and live-data gates promote them.
 - A trade needs a named setup, trigger, confirmation, invalidation, position-size
   logic, expected holding period, and post-trade review label.
+- Day-trading mode is flat-by-default: stop opening new positions into the close,
+  cancel working orders, and exit intraday holdings before the closing window
+  unless a separate swing/overnight mandate explicitly overrides it.
+- Scan broad liquid instruments: single stocks, sector/index ETFs such as SPY
+  and QQQ, volatility/treasury/commodity proxies, and currency ETFs when macro
+  or FX catalysts are active. Do not assume direct spot forex is tradeable
+  through the current Alpaca equities workflow.
 - Liquidity/data gates are mandatory: fresh price, clean spread, sufficient
   volume, market open, no known halt/stale feed, and no duplicate working order.
 - Risk is part of the strategy: bracket exits, no averaging down, stop before

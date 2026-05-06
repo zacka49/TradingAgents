@@ -29,6 +29,10 @@ from tradingagents.dataflows.alpaca_realtime import (
     get_intraday_bars,
     get_latest_quotes,
     get_latest_trades,
+    get_snapshots,
+)
+from tradingagents.dataflows.news_politics_discovery import (
+    discover_news_politics_symbols,
 )
 from tradingagents.dataflows.order_flow import get_alpaca_order_flow_snapshot
 from tradingagents.dataflows.utils import safe_ticker_component
@@ -67,8 +71,23 @@ class MarketCandidate:
     intraday_session_return_pct: float = 0.0
     realtime_volume_ratio: float = 0.0
     quote_spread_pct: float = 0.0
+    bid_price: float = 0.0
+    ask_price: float = 0.0
+    bid_size: float = 0.0
+    ask_size: float = 0.0
+    quote_imbalance: float = 0.0
+    latest_trade_time: str = ""
+    latest_quote_time: str = ""
+    minute_bar_volume: float = 0.0
+    daily_bar_volume: float = 0.0
+    previous_close: float = 0.0
+    prev_close_return_pct: float = 0.0
     order_flow_delta_ratio: float = 0.0
     order_flow_absorption_flags: List[str] = field(default_factory=list)
+    news_catalysts: List[str] = field(default_factory=list)
+    news_headlines: List[str] = field(default_factory=list)
+    political_themes: List[str] = field(default_factory=list)
+    live_market: Dict[str, Any] = field(default_factory=dict)
     realtime_note: str = ""
 
 
@@ -127,6 +146,13 @@ def _pct_change(start: float, end: float) -> float:
     return (end - start) / start * 100.0
 
 
+def _md_cell(value: Any, *, max_len: int = 120) -> str:
+    text = str(value or "").replace("|", "/").replace("\n", " ").strip()
+    if len(text) > max_len:
+        return f"{text[: max_len - 3]}..."
+    return text
+
+
 def _clean_universe(universe: Iterable[str]) -> List[str]:
     seen: set[str] = set()
     cleaned: List[str] = []
@@ -153,6 +179,7 @@ class CodexCEOCompanyRunner:
     ) -> None:
         self.config = config
         self.broker = broker or AlpacaPaperBroker()
+        self._last_catalyst_context: Dict[str, Any] = {}
 
     def run(
         self,
@@ -234,6 +261,15 @@ class CodexCEOCompanyRunner:
     def scan_market(self, universe: Sequence[str] | None = None) -> List[MarketCandidate]:
         tickers = _clean_universe(universe or DEFAULT_DISCOVERY_UNIVERSE)
         max_universe = int(self.config.get("codex_ceo_max_universe", 30))
+        if self.config.get("codex_ceo_news_political_scan_enabled", True):
+            max_universe = max(
+                max_universe,
+                int(self.config.get("codex_ceo_news_political_max_symbols", max_universe)),
+            )
+        tickers = self._expand_universe_with_news_politics(
+            tickers,
+            max_symbols=max(5, max_universe),
+        )
         tickers = tickers[: max(5, max_universe)]
         limit = int(self.config.get("codex_ceo_watchlist_size", 10))
 
@@ -264,10 +300,92 @@ class CodexCEOCompanyRunner:
                 continue
             candidate = self._score_ticker(ticker, history)
             if candidate is not None:
+                self._apply_catalyst_context(candidate)
                 candidates.append(candidate)
 
         ranked = sorted(candidates, key=lambda item: item.score, reverse=True)
         return ranked[: max(1, limit)]
+
+    def _expand_universe_with_news_politics(
+        self,
+        tickers: Sequence[str],
+        *,
+        max_symbols: int,
+    ) -> List[str]:
+        self._last_catalyst_context = {}
+        if not self.config.get("codex_ceo_news_political_scan_enabled", True):
+            return list(tickers)
+
+        configured_max = int(
+            self.config.get("codex_ceo_news_political_max_symbols", max_symbols)
+        )
+        queries = self.config.get("codex_ceo_news_political_queries", [])
+        try:
+            context = discover_news_politics_symbols(
+                tickers,
+                queries=queries or None,
+                max_symbols=max(configured_max, max_symbols),
+                articles_per_query=int(
+                    self.config.get("codex_ceo_news_political_articles_per_query", 8)
+                ),
+            )
+        except Exception as exc:
+            if not self.config.get("codex_ceo_news_political_fallback_to_base", True):
+                raise
+            self._last_catalyst_context = {
+                "symbols": list(tickers),
+                "base_symbols": list(tickers),
+                "added_symbols": [],
+                "errors": [f"{type(exc).__name__}: {exc}"],
+            }
+            return list(tickers)
+
+        self._last_catalyst_context = context
+        expanded = context.get("symbols") or list(tickers)
+        return _clean_universe(expanded)
+
+    def _apply_catalyst_context(self, candidate: MarketCandidate) -> None:
+        context = self._last_catalyst_context or {}
+        symbol = candidate.ticker
+        catalysts = [
+            str(item)
+            for item in context.get("catalysts_by_symbol", {}).get(symbol, [])
+            if str(item)
+        ]
+        themes = [
+            str(item)
+            for item in context.get("themes_by_symbol", {}).get(symbol, [])
+            if str(item)
+        ]
+        headlines = [
+            str(item)
+            for item in context.get("headlines_by_symbol", {}).get(symbol, [])
+            if str(item)
+        ]
+        risk_headlines = [
+            str(item)
+            for item in context.get("risk_headlines_by_symbol", {}).get(symbol, [])
+            if str(item)
+        ]
+
+        if not (catalysts or themes or headlines or risk_headlines):
+            return
+
+        candidate.news_catalysts = sorted(set([*candidate.news_catalysts, *catalysts]))
+        candidate.political_themes = sorted(set([*candidate.political_themes, *themes]))
+        candidate.news_headlines = [*candidate.news_headlines, *headlines][:3]
+
+        catalyst_score = _safe_float(context.get("scores", {}).get(symbol))
+        bonus_per_point = float(self.config.get("codex_ceo_news_catalyst_score_bonus", 0.25))
+        max_bonus = float(self.config.get("codex_ceo_news_catalyst_max_bonus", 1.5))
+        if catalyst_score > 0:
+            candidate.score = round(
+                candidate.score + min(max_bonus, catalyst_score * bonus_per_point),
+                3,
+            )
+
+        if risk_headlines and "news_risk" not in candidate.risk_flags:
+            candidate.risk_flags.append("news_risk")
 
     def _scan_market_realtime(self, tickers: Sequence[str]) -> List[MarketCandidate]:
         lookback_minutes = int(self.config.get("codex_ceo_realtime_lookback_minutes", 90))
@@ -288,16 +406,27 @@ class CodexCEOCompanyRunner:
             feed=feed,
             timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
         )
+        try:
+            snapshots = get_snapshots(
+                tickers,
+                feed=feed,
+                timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
+            )
+        except Exception:
+            snapshots = {}
 
         candidates = []
         for ticker in tickers:
+            snapshot = snapshots.get(ticker, {})
             candidate = self._score_realtime_ticker(
                 ticker,
                 bars_by_ticker.get(ticker, []),
-                latest_trades.get(ticker, {}),
-                latest_quotes.get(ticker, {}),
+                latest_trades.get(ticker, {}) or snapshot.get("latestTrade", {}),
+                latest_quotes.get(ticker, {}) or snapshot.get("latestQuote", {}),
+                snapshot=snapshot,
             )
             if candidate is not None:
+                self._apply_catalyst_context(candidate)
                 candidates.append(candidate)
 
         ranked = sorted(candidates, key=lambda item: item.score, reverse=True)
@@ -421,7 +550,15 @@ class CodexCEOCompanyRunner:
         bars: Sequence[Dict[str, Any]],
         latest_trade: Dict[str, Any],
         latest_quote: Dict[str, Any],
+        *,
+        snapshot: Dict[str, Any] | None = None,
     ) -> MarketCandidate | None:
+        snapshot = snapshot or {}
+        latest_trade = latest_trade or snapshot.get("latestTrade", {}) or {}
+        latest_quote = latest_quote or snapshot.get("latestQuote", {}) or {}
+        minute_bar = snapshot.get("minuteBar", {}) if isinstance(snapshot, dict) else {}
+        daily_bar = snapshot.get("dailyBar", {}) if isinstance(snapshot, dict) else {}
+        prev_daily_bar = snapshot.get("prevDailyBar", {}) if isinstance(snapshot, dict) else {}
         bars = self._prefer_regular_session_bars(bars)
         if len(bars) < 3:
             return None
@@ -462,8 +599,63 @@ class CodexCEOCompanyRunner:
 
         bid = _safe_float(latest_quote.get("bp"))
         ask = _safe_float(latest_quote.get("ap"))
+        bid_size = _safe_float(latest_quote.get("bs"))
+        ask_size = _safe_float(latest_quote.get("as"))
         midpoint = (bid + ask) / 2 if bid > 0 and ask > 0 and ask >= bid else 0.0
         spread_pct = ((ask - bid) / midpoint * 100.0) if midpoint else 0.0
+        quote_imbalance = (
+            (bid_size - ask_size) / (bid_size + ask_size)
+            if bid_size + ask_size > 0
+            else 0.0
+        )
+        previous_close = _safe_float(prev_daily_bar.get("c"))
+        prev_close_return = _pct_change(previous_close, latest) if previous_close else 0.0
+        live_market = {
+            "feed": self.config.get("alpaca_stock_feed") or "env_default",
+            "latest_trade": {
+                "price": _safe_float(latest_trade.get("p")),
+                "size": _safe_float(latest_trade.get("s")),
+                "timestamp": latest_trade.get("t"),
+                "exchange": latest_trade.get("x"),
+                "conditions": latest_trade.get("c", []),
+            },
+            "latest_quote": {
+                "bid_price": bid,
+                "ask_price": ask,
+                "bid_size": bid_size,
+                "ask_size": ask_size,
+                "quote_imbalance": round(quote_imbalance, 4),
+                "timestamp": latest_quote.get("t"),
+            },
+            "minute_bar": {
+                "open": _safe_float(minute_bar.get("o")),
+                "high": _safe_float(minute_bar.get("h")),
+                "low": _safe_float(minute_bar.get("l")),
+                "close": _safe_float(minute_bar.get("c")),
+                "volume": _safe_float(minute_bar.get("v")),
+                "vwap": _safe_float(minute_bar.get("vw")),
+                "timestamp": minute_bar.get("t"),
+            },
+            "daily_bar": {
+                "open": _safe_float(daily_bar.get("o")),
+                "high": _safe_float(daily_bar.get("h")),
+                "low": _safe_float(daily_bar.get("l")),
+                "close": _safe_float(daily_bar.get("c")),
+                "volume": _safe_float(daily_bar.get("v")),
+                "vwap": _safe_float(daily_bar.get("vw")),
+                "timestamp": daily_bar.get("t"),
+            },
+            "prev_daily_bar": {
+                "close": previous_close,
+                "volume": _safe_float(prev_daily_bar.get("v")),
+                "timestamp": prev_daily_bar.get("t"),
+            },
+        }
+        live_note_prefix = (
+            "Alpaca snapshot, latest trade/quote, and"
+            if snapshot
+            else "Alpaca latest trade/quote and"
+        )
 
         risk_flags: List[str] = []
         if spread_pct > float(self.config.get("codex_ceo_realtime_max_spread_pct", 0.12)):
@@ -535,8 +727,20 @@ class CodexCEOCompanyRunner:
             intraday_session_return_pct=round(session_return, 3),
             realtime_volume_ratio=round(volume_ratio, 3),
             quote_spread_pct=round(spread_pct, 4),
+            bid_price=round(bid, 4),
+            ask_price=round(ask, 4),
+            bid_size=round(bid_size, 4),
+            ask_size=round(ask_size, 4),
+            quote_imbalance=round(quote_imbalance, 4),
+            latest_trade_time=str(latest_trade.get("t") or ""),
+            latest_quote_time=str(latest_quote.get("t") or ""),
+            minute_bar_volume=round(_safe_float(minute_bar.get("v")), 4),
+            daily_bar_volume=round(_safe_float(daily_bar.get("v")), 4),
+            previous_close=round(previous_close, 4),
+            prev_close_return_pct=round(prev_close_return, 3),
+            live_market=live_market,
             realtime_note=(
-                f"Alpaca latest trade/quote plus {len(bars)} one-minute bars."
+                f"{live_note_prefix} {len(bars)} one-minute bars."
             ),
         )
 
@@ -658,6 +862,7 @@ class CodexCEOCompanyRunner:
                 snapshot = get_alpaca_order_flow_snapshot(
                     candidate.ticker,
                     lookback_minutes=lookback_minutes,
+                    feed=self.config.get("alpaca_stock_feed") or None,
                     timeout=int(self.config.get("alpaca_data_timeout_seconds", 20)),
                 )
             except Exception:
@@ -928,7 +1133,11 @@ class CodexCEOCompanyRunner:
                 plan.blocked_reason = f"submit_failed_{type(exc).__name__}"
 
     def _refresh_plan_price(self, plan: PortfolioOrderPlan) -> None:
-        trade = self.broker.get_latest_trade(plan.ticker)
+        feed = self.config.get("alpaca_stock_feed") or None
+        try:
+            trade = self.broker.get_latest_trade(plan.ticker, feed=feed)
+        except TypeError:
+            trade = self.broker.get_latest_trade(plan.ticker)
         price = _safe_float(trade.get("p"))
         if price <= 0:
             return
@@ -989,7 +1198,8 @@ class CodexCEOCompanyRunner:
         candidate_rows = "\n".join(
             f"- {c.ticker}: score {c.score}, 5d {c.return_5d_pct}%, "
             f"20d {c.return_20d_pct}%, strategy {c.strategy} "
-            f"({c.strategy_confidence}), risk {', '.join(c.risk_flags) or 'none'}"
+            f"({c.strategy_confidence}), risk {', '.join(c.risk_flags) or 'none'}, "
+            f"news/themes {', '.join(c.political_themes or c.news_catalysts) or 'none'}"
             for c in candidates[:10]
         )
         order_rows = "\n".join(
@@ -1031,6 +1241,7 @@ class CodexCEOCompanyRunner:
             "open_orders": list(open_orders),
             "clock": clock,
             "candidates": [asdict(candidate) for candidate in candidates],
+            "catalyst_context": self._last_catalyst_context,
             "target_weights": target_weights,
             "order_plans": [asdict(plan) for plan in order_plans],
             "technology_capabilities": capabilities_as_dicts(technology_capabilities),
@@ -1158,6 +1369,31 @@ class CodexCEOCompanyRunner:
                 )
             )
 
+        catalyst_candidates = [
+            candidate
+            for candidate in candidates[:10]
+            if candidate.news_catalysts or candidate.political_themes or candidate.news_headlines
+        ]
+        if catalyst_candidates:
+            lines.extend(
+                [
+                    "",
+                    "## News And Policy Catalysts",
+                    "| Ticker | Themes | Catalysts | Headlines |",
+                    "| --- | --- | --- | --- |",
+                ]
+            )
+            for candidate in catalyst_candidates:
+                lines.append(
+                    "| {ticker} | {themes} | {catalysts} | {headlines} |".format(
+                        ticker=candidate.ticker,
+                        themes=_md_cell(", ".join(candidate.political_themes) or "none"),
+                        catalysts=_md_cell(", ".join(candidate.news_catalysts) or "none"),
+                        headlines=_md_cell("; ".join(candidate.news_headlines), max_len=180)
+                        or "none",
+                    )
+                )
+
         if candidates and candidates[0].data_source == "alpaca_realtime":
             lines.extend(
                 [
@@ -1176,6 +1412,24 @@ class CodexCEOCompanyRunner:
                     f"{candidate.quote_spread_pct:.3f} | "
                     f"{candidate.order_flow_delta_ratio:.3f} | "
                     f"{', '.join(candidate.order_flow_absorption_flags) or 'none'} |"
+                )
+
+            lines.extend(
+                [
+                    "",
+                    "## Live Market Snapshot",
+                    "| Ticker | Bid | Ask | Bid Sz | Ask Sz | Quote Imb | Min Vol | Day Vol | Prev Close % | Last Trade |",
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+                ]
+            )
+            for candidate in candidates[:10]:
+                lines.append(
+                    f"| {candidate.ticker} | {candidate.bid_price:.2f} | "
+                    f"{candidate.ask_price:.2f} | {candidate.bid_size:.0f} | "
+                    f"{candidate.ask_size:.0f} | {candidate.quote_imbalance:.3f} | "
+                    f"{candidate.minute_bar_volume:.0f} | {candidate.daily_bar_volume:.0f} | "
+                    f"{candidate.prev_close_return_pct:.2f} | "
+                    f"{_md_cell(candidate.latest_trade_time, max_len=32)} |"
                 )
 
         if self.config.get("backtest_lab_enabled", True):

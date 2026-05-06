@@ -396,6 +396,95 @@ def test_realtime_opening_range_breakout_is_classified():
     assert candidate.auto_trade_allowed is True
 
 
+def test_realtime_candidate_carries_alpaca_snapshot_fields():
+    runner = CodexCEOCompanyRunner(
+        {
+            "strategy_profile_name": "risky",
+            "day_trade_block_risk_flags": [],
+            "day_trade_stop_loss_multiplier": 1.0,
+            "day_trade_take_profit_multiplier": 1.0,
+            "day_trade_min_stop_loss_pct": 0.005,
+            "day_trade_max_stop_loss_pct": 0.10,
+            "day_trade_min_take_profit_pct": 0.01,
+            "day_trade_max_take_profit_pct": 0.20,
+            "codex_ceo_min_price": 5.0,
+            "codex_ceo_realtime_min_recent_volume": 0,
+            "codex_ceo_realtime_max_spread_pct": 0.12,
+            "codex_ceo_realtime_high_volatility_pct": 2.0,
+            "codex_ceo_realtime_max_trade_age_seconds": 3600,
+            "alpaca_stock_feed": "iex",
+        },
+        broker=FakeBroker(),
+    )
+    bars = [
+        {"t": "2026-05-05T13:30:00Z", "o": 100, "h": 101, "l": 99, "c": 100, "v": 1000},
+        {"t": "2026-05-05T13:31:00Z", "o": 100, "h": 102, "l": 99, "c": 101, "v": 1200},
+        {"t": "2026-05-05T13:32:00Z", "o": 101, "h": 103, "l": 100, "c": 102, "v": 1300},
+    ]
+    snapshot = {
+        "latestTrade": {"p": 103, "s": 200, "t": "2026-05-05T13:32:30Z"},
+        "latestQuote": {"bp": 102.95, "ap": 103.05, "bs": 6, "as": 4, "t": "2026-05-05T13:32:31Z"},
+        "minuteBar": {"o": 102, "h": 103.2, "l": 101.9, "c": 103, "v": 2222},
+        "dailyBar": {"o": 99, "h": 104, "l": 98, "c": 103, "v": 333333},
+        "prevDailyBar": {"c": 100, "v": 444444},
+    }
+
+    candidate = runner._score_realtime_ticker(
+        "AAA",
+        bars,
+        {},
+        {},
+        snapshot=snapshot,
+    )
+
+    assert candidate is not None
+    assert candidate.bid_price == 102.95
+    assert candidate.ask_price == 103.05
+    assert candidate.quote_imbalance == 0.2
+    assert candidate.minute_bar_volume == 2222
+    assert candidate.daily_bar_volume == 333333
+    assert candidate.prev_close_return_pct == 3.0
+    assert candidate.live_market["latest_trade"]["price"] == 103
+
+
+def test_news_politics_context_expands_and_boosts_candidates(monkeypatch):
+    def fake_discover(base, **kwargs):
+        return {
+            "symbols": [*base, "NVDA"],
+            "base_symbols": list(base),
+            "added_symbols": ["NVDA"],
+            "scores": {"NVDA": 4},
+            "catalysts_by_symbol": {"NVDA": ["direct_headline_match"]},
+            "themes_by_symbol": {"NVDA": ["ai_chips_datacenter"]},
+            "headlines_by_symbol": {"NVDA": ["AI chip policy puts NVDA in focus (TestWire)"]},
+            "risk_headlines_by_symbol": {},
+            "errors": [],
+        }
+
+    monkeypatch.setattr(
+        "tradingagents.company.codex_ceo_company.discover_news_politics_symbols",
+        fake_discover,
+    )
+    runner = CodexCEOCompanyRunner(
+        {
+            "codex_ceo_news_political_scan_enabled": True,
+            "codex_ceo_news_political_max_symbols": 5,
+            "codex_ceo_news_catalyst_score_bonus": 0.25,
+            "codex_ceo_news_catalyst_max_bonus": 2,
+        },
+        broker=FakeBroker(),
+    )
+    expanded = runner._expand_universe_with_news_politics(["SPY"], max_symbols=5)
+    candidate = _candidate("NVDA", 100, 1)
+
+    runner._apply_catalyst_context(candidate)
+
+    assert expanded == ["SPY", "NVDA"]
+    assert candidate.score == 2.0
+    assert candidate.political_themes == ["ai_chips_datacenter"]
+    assert candidate.news_headlines == ["AI chip policy puts NVDA in focus (TestWire)"]
+
+
 def test_strategy_doctrine_context_contains_tradeable_and_watch_only_rules():
     doctrine = get_strategy_doctrine_context()
 

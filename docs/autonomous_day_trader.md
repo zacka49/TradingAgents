@@ -5,6 +5,11 @@ This runner is paper-only. The self-running CEO agent in
 per-trade approval, but it still enforces the Alpaca market clock, order caps,
 buying power, duplicate-open-order suppression, and bracket exits.
 
+By default it now behaves as a strict day trader: it stops opening new positions
+15 minutes before the close, cancels working orders, and asks Alpaca to flatten
+the paper account 5 minutes before the close. Disable this only for an explicit
+swing/overnight experiment.
+
 ## Environment
 
 Required:
@@ -62,6 +67,37 @@ events also stream to the VS Code terminal in plain English, for example when
 the CEO is running research, monitoring live risk, reviewing strategies, or
 placing a trade.
 
+The default VS Code launcher now scans a broader liquid catalyst universe across
+mega-cap tech, semis, crypto proxies, banks, healthcare, energy, defense,
+indexes, and rates/commodity ETFs. The system also expands that base universe
+from current news and political/policy themes before each strategy scan.
+
+Useful knobs:
+
+```powershell
+.\.venv\Scripts\python.exe run_day_trader_bot.py `
+  --news-query "tariffs semiconductor export controls" `
+  --news-query "Federal Reserve rate cut bank stocks" `
+  --news-max-symbols 75 `
+  --alpaca-stock-feed sip
+```
+
+Use `--disable-news-politics` to run only the explicit universe. Use
+`--alpaca-stock-feed sip` only when your Alpaca plan supports it; otherwise keep
+`iex` or the value in `ALPACA_STOCK_FEED`.
+
+Close-discipline knobs:
+
+```powershell
+.\.venv\Scripts\python.exe run_day_trader_bot.py `
+  --flatten-minutes-before-close 5 `
+  --stop-new-entries-minutes-before-close 15
+```
+
+Use `--disable-flatten-at-close` only when you explicitly want to test overnight
+carry behavior. Use `--no-flatten-on-max-cycles` only when a bounded test run
+should leave the paper account untouched after the final cycle.
+
 ## Profiles
 
 `safe` minimizes loss exposure:
@@ -90,8 +126,23 @@ The realtime scanner uses Alpaca Market Data:
 
 - 1-minute intraday bars for fast trend and volume ranking
 - latest trades and quotes for entry reference, spread, and stale-data checks
+- snapshots for combined latest trade, latest quote, latest minute bar, current
+  daily bar, and previous daily bar context
 - recent trades and top-of-book quotes for volume profile, delta, large prints,
   and absorption flags
+- yfinance Search news for broad macro, politics, policy, and sector catalysts
+  that can add related liquid tickers to the scan universe
+- currency ETFs such as `UUP`, `FXE`, `FXY`, `FXB`, `FXA`, and `FXC` as tradable
+  FX proxies; direct spot forex needs a dedicated FX broker/data integration
+  because this Alpaca equities workflow is not a spot-forex execution stack
+
+News/policy catalysts only expand and annotate the scan. They do not by
+themselves authorize trades; price action, volume, spread, stale-data checks,
+strategy confidence, order-flow enrichment, account exposure, and risk caps
+still gate every paper order.
+
+The broader research/training doctrine lives in
+`knowledge/day_trader_ai_research_program_2026.md`.
 
 Alpaca's docs note that Basic market data provides live IEX equity coverage,
 while SIP requires the paid Algo Trader Plus plan. They also recommend stock
@@ -101,6 +152,8 @@ kept short and isolated behind `tradingagents/dataflows/alpaca_realtime.py`.
 References:
 
 - [Alpaca placing orders](https://docs.alpaca.markets/docs/trading/orders/)
+- [Alpaca close all positions](https://docs.alpaca.markets/reference/deleteallopenpositions-1)
 - [Alpaca market data FAQ](https://docs.alpaca.markets/docs/market-data-faq)
 - [Alpaca latest trades endpoint](https://docs.alpaca.markets/reference/stocklatesttrades-1)
+- [Alpaca snapshots endpoint](https://docs.alpaca.markets/reference/stocksnapshots-1)
 - [Alpaca real-time stock data](https://docs.alpaca.markets/docs/real-time-stock-pricing-data)

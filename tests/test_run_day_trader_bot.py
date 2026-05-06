@@ -25,6 +25,12 @@ def test_vs_code_launcher_defaults_run_full_bot_until_close():
     assert settings.once is False
     assert settings.interval_seconds == launcher.DEFAULT_INTERVAL_SECONDS
     assert settings.position_monitor_seconds == launcher.DEFAULT_POSITION_MONITOR_SECONDS
+    assert settings.flatten_at_close is True
+    assert settings.flatten_minutes_before_close == 5
+    assert settings.stop_new_entries_minutes_before_close == 15
+    assert "QQQ" in settings.universe
+    assert "SPY" in settings.universe
+    assert "UUP" in settings.universe
     assert settings.results_dir == str(
         launcher.REPO_ROOT / launcher.DEFAULT_RESULTS_DIR
     )

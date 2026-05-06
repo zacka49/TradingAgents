@@ -32,6 +32,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--liquidate-non-targets", action="store_true")
     parser.add_argument("--with-staff-memo", action="store_true")
     parser.add_argument("--with-tech-scout", action="store_true")
+    parser.add_argument("--disable-flatten-at-close", action="store_true")
+    parser.add_argument("--flatten-minutes-before-close", type=int, default=5)
+    parser.add_argument("--stop-new-entries-minutes-before-close", type=int, default=15)
+    parser.add_argument("--no-flatten-on-max-cycles", action="store_true")
+    parser.add_argument("--disable-news-politics", action="store_true")
+    parser.add_argument("--news-max-symbols", type=int, default=None)
+    parser.add_argument("--news-query", action="append", default=[])
+    parser.add_argument(
+        "--alpaca-stock-feed",
+        choices=["iex", "sip", "delayed_sip", "boats", "overnight", "otc"],
+        default=None,
+    )
     return parser
 
 
@@ -52,6 +64,14 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         liquidate_non_targets=bool(args.liquidate_non_targets),
         ollama_staff_memo_enabled=bool(args.with_staff_memo),
         technology_scout_enabled=bool(args.with_tech_scout),
+        news_politics_scan_enabled=not bool(args.disable_news_politics),
+        news_politics_max_symbols=args.news_max_symbols,
+        news_politics_queries=tuple(args.news_query or []),
+        alpaca_stock_feed=args.alpaca_stock_feed,
+        flatten_at_close=not bool(args.disable_flatten_at_close),
+        flatten_minutes_before_close=args.flatten_minutes_before_close,
+        stop_new_entries_minutes_before_close=args.stop_new_entries_minutes_before_close,
+        flatten_on_max_cycles=not bool(args.no_flatten_on_max_cycles),
     )
 
 

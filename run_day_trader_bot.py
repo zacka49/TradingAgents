@@ -20,7 +20,56 @@ from tradingagents.company import (
 )
 
 
-DEFAULT_UNIVERSE = "AMD,NVDA,INTC,COIN,QQQ,SPY,PLTR,MU,TSLA,HOOD"
+DEFAULT_UNIVERSE = ",".join(
+    [
+        "AMD",
+        "NVDA",
+        "INTC",
+        "COIN",
+        "QQQ",
+        "SPY",
+        "PLTR",
+        "MU",
+        "TSLA",
+        "HOOD",
+        "AAPL",
+        "MSFT",
+        "META",
+        "AMZN",
+        "GOOGL",
+        "AVGO",
+        "ARM",
+        "SMCI",
+        "CRWD",
+        "PANW",
+        "JPM",
+        "BAC",
+        "GS",
+        "XLF",
+        "LLY",
+        "NVO",
+        "UNH",
+        "XLV",
+        "XOM",
+        "CVX",
+        "XLE",
+        "LMT",
+        "NOC",
+        "RTX",
+        "ITA",
+        "TLT",
+        "GLD",
+        "UUP",
+        "FXE",
+        "FXY",
+        "FXB",
+        "FXA",
+        "FXC",
+        "IWM",
+        "SOXX",
+        "IBIT",
+    ]
+)
 DEFAULT_RESULTS_DIR = "results/autonomous_day_trader"
 DEFAULT_LOG_DIR = "results/autonomous_day_trader/live_logs"
 DEFAULT_INTERVAL_SECONDS = 30
@@ -73,6 +122,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--liquidate-non-targets", action="store_true")
     parser.add_argument("--with-staff-memo", action="store_true")
     parser.add_argument("--with-tech-scout", action="store_true")
+    parser.add_argument("--disable-flatten-at-close", action="store_true")
+    parser.add_argument("--flatten-minutes-before-close", type=int, default=5)
+    parser.add_argument("--stop-new-entries-minutes-before-close", type=int, default=15)
+    parser.add_argument("--no-flatten-on-max-cycles", action="store_true")
+    parser.add_argument("--disable-news-politics", action="store_true")
+    parser.add_argument("--news-max-symbols", type=int, default=None)
+    parser.add_argument(
+        "--news-query",
+        action="append",
+        default=[],
+        help="Additional news/policy query. Can be passed more than once.",
+    )
+    parser.add_argument(
+        "--alpaca-stock-feed",
+        choices=["iex", "sip", "delayed_sip", "boats", "overnight", "otc"],
+        default=None,
+        help="Override ALPACA_STOCK_FEED for this run.",
+    )
     return parser
 
 
@@ -93,6 +160,14 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         liquidate_non_targets=bool(args.liquidate_non_targets),
         ollama_staff_memo_enabled=bool(args.with_staff_memo),
         technology_scout_enabled=bool(args.with_tech_scout),
+        news_politics_scan_enabled=not bool(args.disable_news_politics),
+        news_politics_max_symbols=args.news_max_symbols,
+        news_politics_queries=tuple(args.news_query or []),
+        alpaca_stock_feed=args.alpaca_stock_feed,
+        flatten_at_close=not bool(args.disable_flatten_at_close),
+        flatten_minutes_before_close=args.flatten_minutes_before_close,
+        stop_new_entries_minutes_before_close=args.stop_new_entries_minutes_before_close,
+        flatten_on_max_cycles=not bool(args.no_flatten_on_max_cycles),
     )
 
 
@@ -128,6 +203,8 @@ def terminal_message(payload: Dict[str, Any]) -> str:
             f"Profiles: {', '.join(settings.get('profiles', []))}. "
             f"Strategy scan every {settings.get('interval_seconds')} seconds, "
             f"position monitor every {settings.get('position_monitor_seconds')} seconds. "
+            f"News/policy expansion: {settings.get('news_politics_scan_enabled')}. "
+            f"Flatten before close: {settings.get('flatten_at_close')}. "
             f"Log: {payload.get('log_file')}."
         )
     if event == "waiting_for_market_open":
@@ -147,7 +224,8 @@ def terminal_message(payload: Dict[str, Any]) -> str:
         universe = payload.get("universe", [])
         return (
             f"Cycle {cycle}: running research across {len(universe)} live symbols. "
-            "I am checking price, volume, momentum, spread, and risk gates quickly."
+            "I am checking price, volume, momentum, spread, news/policy catalysts, "
+            "and risk gates quickly."
         )
     if event == "autonomous_ceo_profile_start":
         profile = payload.get("strategy_profile")
@@ -195,6 +273,30 @@ def terminal_message(payload: Dict[str, Any]) -> str:
             f"Deep strategy scan finished. I will run the next full scan in "
             f"{payload.get('sleep_seconds')} seconds, while the live position "
             "monitor keeps watching open trades."
+        )
+    if event == "autonomous_ceo_no_new_entries_window":
+        return (
+            "Close-risk window is active. I am not opening new trades now; "
+            f"market close is in {payload.get('seconds_to_close')}s and "
+            f"flattening starts in {payload.get('wait_seconds')}s."
+        )
+    if event == "autonomous_ceo_eod_flatten_start":
+        return (
+            "End-of-day flatten is starting. I am cancelling open orders and "
+            f"liquidating {payload.get('positions_count', 0)} position(s) "
+            f"because {payload.get('reason')}."
+        )
+    if event == "autonomous_ceo_eod_flatten_complete":
+        return (
+            "End-of-day flatten request completed in Alpaca paper. "
+            f"Reason: {payload.get('reason')}."
+        )
+    if event == "autonomous_ceo_eod_flatten_skipped":
+        return "End-of-day flatten checked the account; there were no positions or open orders."
+    if event == "autonomous_ceo_eod_flatten_error":
+        return (
+            "End-of-day flatten failed. "
+            f"{payload.get('stage')}: {payload.get('error_type')}: {payload.get('error')}."
         )
     if event == "autonomous_ceo_position_monitor":
         positions_count = payload.get("positions_count", 0)

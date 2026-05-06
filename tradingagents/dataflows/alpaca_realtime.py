@@ -97,6 +97,72 @@ def get_latest_quotes(
     return quotes
 
 
+def get_latest_bars(
+    symbols: Iterable[str],
+    *,
+    feed: str | None = None,
+    timeout: int = 20,
+    batch_size: int = 50,
+) -> Dict[str, Dict[str, Any]]:
+    """Return Alpaca's latest minute bar keyed by symbol."""
+    cleaned = _clean_symbols(symbols)
+    if not cleaned:
+        return {}
+
+    headers = _alpaca_headers()
+    stock_feed = feed or os.getenv("ALPACA_STOCK_FEED", "iex")
+    bars: Dict[str, Dict[str, Any]] = {}
+    for batch in _chunks(cleaned, max(1, batch_size)):
+        resp = requests.get(
+            f"{ALPACA_DATA_BASE_URL}/v2/stocks/bars/latest",
+            headers=headers,
+            params={"symbols": ",".join(batch), "feed": stock_feed},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        payload = resp.json().get("bars", {})
+        for symbol, bar in payload.items():
+            if isinstance(bar, dict):
+                bars[str(symbol).upper()] = bar
+    return bars
+
+
+def get_snapshots(
+    symbols: Iterable[str],
+    *,
+    feed: str | None = None,
+    timeout: int = 20,
+    batch_size: int = 50,
+) -> Dict[str, Dict[str, Any]]:
+    """Return Alpaca stock snapshots keyed by symbol.
+
+    A snapshot combines the latest trade, latest quote, latest minute bar,
+    current daily bar, and previous daily bar. It is the richest REST polling
+    endpoint Alpaca exposes for broad stock scans.
+    """
+    cleaned = _clean_symbols(symbols)
+    if not cleaned:
+        return {}
+
+    headers = _alpaca_headers()
+    stock_feed = feed or os.getenv("ALPACA_STOCK_FEED", "iex")
+    snapshots: Dict[str, Dict[str, Any]] = {}
+    for batch in _chunks(cleaned, max(1, batch_size)):
+        resp = requests.get(
+            f"{ALPACA_DATA_BASE_URL}/v2/stocks/snapshots",
+            headers=headers,
+            params={"symbols": ",".join(batch), "feed": stock_feed},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        raw_payload = resp.json()
+        payload = raw_payload.get("snapshots", raw_payload)
+        for symbol, snapshot in payload.items():
+            if isinstance(snapshot, dict):
+                snapshots[str(symbol).upper()] = snapshot
+    return snapshots
+
+
 def get_intraday_bars(
     symbols: Iterable[str],
     *,
@@ -141,4 +207,3 @@ def get_intraday_bars(
                     bar for bar in bars if isinstance(bar, dict)
                 ]
     return bars_by_symbol
-
