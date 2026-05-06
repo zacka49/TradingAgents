@@ -54,6 +54,20 @@ Equivalent CEO entrypoint:
   --results-dir results/autonomous_day_trader
 ```
 
+## Run From VS Code
+
+Open `run_day_trader_bot.py` in VS Code and press Run Python File, or run:
+
+```powershell
+.\.venv\Scripts\python.exe run_day_trader_bot.py
+```
+
+This starts the autonomous CEO agent in Alpaca paper mode, runs both safe and
+risky profiles every 60 seconds while the market is open, and writes a JSONL
+session log under `results/autonomous_day_trader/live_logs/`. The same events
+also stream to the VS Code terminal so the board can see what the business is
+doing without Codex supervising the bot.
+
 ## Profiles
 
 `safe` minimizes loss exposure:

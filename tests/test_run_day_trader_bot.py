@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+
+def _load_launcher_module():
+    repo_root = Path(__file__).resolve().parents[1]
+    module_path = repo_root / "run_day_trader_bot.py"
+    spec = importlib.util.spec_from_file_location("run_day_trader_bot", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_vs_code_launcher_defaults_run_full_bot_until_close():
+    launcher = _load_launcher_module()
+    args = launcher.build_parser().parse_args([])
+    settings = launcher.settings_from_args(args)
+
+    assert args.universe == launcher.DEFAULT_UNIVERSE
+    assert settings.profiles == ["safe", "risky"]
+    assert settings.run_until_close is True
+    assert settings.once is False
+    assert settings.interval_seconds == 60
+    assert settings.results_dir == str(
+        launcher.REPO_ROOT / launcher.DEFAULT_RESULTS_DIR
+    )
+
+
+def test_vs_code_launcher_once_mode_only_runs_one_cycle():
+    launcher = _load_launcher_module()
+    args = launcher.build_parser().parse_args(
+        ["--once", "--strategy", "safe", "--universe", "SPY, QQQ"]
+    )
+    settings = launcher.settings_from_args(args)
+
+    assert settings.profiles == ["safe"]
+    assert settings.universe == ["SPY", "QQQ"]
+    assert settings.run_until_close is False
+    assert settings.once is True
