@@ -490,6 +490,8 @@ def test_strategy_doctrine_context_contains_tradeable_and_watch_only_rules():
 
     assert "Regime before signal" in doctrine
     assert "opening-range breakout" in doctrine
+    assert "famous-trader playbooks" in doctrine
+    assert "pivotal-point volume breakouts" in doctrine
     assert "VWAP reclaim" in doctrine
     assert "watch/research modes" in doctrine
 

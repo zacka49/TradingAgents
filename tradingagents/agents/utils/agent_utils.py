@@ -77,6 +77,11 @@ Trading Strategy Doctrine:
   momentum breakout, opening-range breakout, and selective relative-strength
   continuation. VWAP reclaim, range reversion, fading, news shock, and scalping
   are watch/research modes unless backtests and live-data gates promote them.
+- Use famous-trader playbooks as hypothesis sources, not authority. Recent
+  proxy research favors pivotal-point volume breakouts, NR7/compression-filtered
+  opening-range breakouts, and volume-confirmed chart breakouts for paper-watch;
+  broad ORB, loose price-action pullbacks, gap momentum, VCP, squeeze, and
+  Turtle Soup variants need stricter filters before autonomous deployment.
 - A trade needs a named setup, trigger, confirmation, invalidation, position-size
   logic, expected holding period, and post-trade review label.
 - Day-trading mode is flat-by-default: stop opening new positions into the close,

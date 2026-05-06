@@ -52,6 +52,9 @@ The default scanner should cover:
 The agents should learn these as separate playbooks, each with entry trigger,
 confirmation, invalidation, risk, sizing, and review labels:
 
+- Pivotal-point volume breakout.
+- NR7/compression-filtered opening range breakout.
+- Volume-confirmed chart breakout.
 - Opening range breakout.
 - Momentum breakout.
 - Relative-strength continuation.
@@ -70,6 +73,34 @@ confirmation, invalidation, risk, sizing, and review labels:
 
 Only strategies with tests, live-data gates, and risk controls should be
 eligible for autonomous paper execution.
+
+## Famous Trader Playbook Translation
+
+Reference report:
+`knowledge/famous_day_trader_playbook_backtests_2026.md`.
+
+The agents should study famous day traders as structured case studies, not as
+heroes to copy. Public trader material becomes useful only after it is converted
+into:
+
+- A named setup.
+- A measurable trigger.
+- Confirmation gates.
+- Invalidation and stop logic.
+- Position sizing and account-risk limits.
+- Holding-period rules.
+- Post-trade review tags.
+
+The 2026-05-07 proxy backtest found the strongest recent long-only intraday
+evidence in pivotal-point volume breakouts, NR7/compression-filtered ORB, and
+volume-confirmed chart breakouts. Turtle Soup reclaim was positive but too
+drawdown-heavy. Gap momentum, broad ORB/VWAP, loose price-action pullbacks, VCP,
+Episodic Pivot, and TTM Squeeze proxies need tighter catalyst, regime, and
+multi-timeframe filters before promotion.
+
+Promotion rule of thumb: do not move a public playbook beyond paper-watch unless
+it has positive expectancy, profit factor above 1.15, at least 50 trades, max
+drawdown below 8%, and survives a different time window/universe.
 
 ## Data Curriculum
 
