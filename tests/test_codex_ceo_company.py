@@ -51,6 +51,17 @@ class FakePLTRBroker(FakeBroker):
         return {"p": 134.13}
 
 
+class FakeLargePaperBroker(FakeBroker):
+    def get_account(self):
+        return {
+            "status": "ACTIVE",
+            "equity": "100000",
+            "buying_power": "100000",
+            "cash": "100000",
+            "portfolio_value": "100000",
+        }
+
+
 def _candidate(ticker, price, score):
     return MarketCandidate(
         ticker=ticker,
@@ -307,13 +318,40 @@ def test_safe_and_risky_profiles_apply_distinct_risk_caps():
     assert risky["ceo_approval_required"] is False
     assert "opening_range_breakout_15m" in safe["day_trade_auto_strategies"]
     assert "opening_range_breakout_15m" in risky["day_trade_auto_strategies"]
-    assert safe["max_order_notional_usd"] == 1000.0
-    assert risky["max_order_notional_usd"] == 2500.0
-    assert safe["portfolio_max_deploy_usd"] == 10000.0
-    assert risky["portfolio_max_deploy_usd"] == 25000.0
+    assert safe["portfolio_min_order_notional_usd"] == 2000.0
+    assert risky["portfolio_min_order_notional_usd"] == 2000.0
+    assert safe["max_order_notional_usd"] == 3000.0
+    assert risky["max_order_notional_usd"] == 5000.0
+    assert safe["portfolio_max_deploy_usd"] == 50000.0
+    assert risky["portfolio_max_deploy_usd"] == 60000.0
     assert safe["max_order_notional_usd"] < risky["max_order_notional_usd"]
     assert safe["day_trade_min_strategy_confidence"] > risky["day_trade_min_strategy_confidence"]
     assert safe["day_trade_max_stop_loss_pct"] < risky["day_trade_max_stop_loss_pct"]
+
+
+def test_profiles_size_trades_above_two_thousand_for_large_paper_account():
+    broker = FakeLargePaperBroker()
+    candidate = _candidate("AAA", 50, 10)
+    candidate.strategy = "relative_strength_continuation"
+    candidates = [candidate]
+
+    for profile_name in ["safe", "risky"]:
+        runner = CodexCEOCompanyRunner(
+            {
+                **apply_day_trader_profile(DEFAULT_CONFIG, profile_name),
+                "ollama_staff_memo_enabled": False,
+                "results_dir": "unused",
+            },
+            broker=broker,
+        )
+        plans = runner.build_order_plans(
+            candidates=candidates,
+            target_weights=runner.build_target_weights(candidates),
+            account=broker.get_account(),
+            positions=[],
+        )
+
+        assert plans[0].estimated_notional_usd >= 2000
 
 
 def test_realtime_opening_range_breakout_is_classified():

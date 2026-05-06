@@ -66,16 +66,18 @@ placing a trade.
 
 `safe` minimizes loss exposure:
 
-- smaller order cap, currently up to about `$1,000` per new paper order
-- up to 10% paper-account deployment by default on a `$100k` account
+- minimum `$2,000` target notional per new paper order
+- smaller order cap, currently up to about `$3,000` per new paper order
+- up to 20% paper-account deployment by default on a `$100k` account
 - higher confidence gate
 - tighter stops and tighter take-profit brackets
 - blocks high volatility, wide spreads, stale trades, and weak backtests
 
 `risky` maximizes paper upside:
 
-- larger order cap, currently up to about `$2,500` per new paper order
-- up to 25% paper-account deployment by default on a `$100k` account
+- minimum `$2,000` target notional per new paper order
+- larger order cap, currently up to about `$5,000` per new paper order
+- up to 30% paper-account deployment by default on a `$100k` account
 - more target positions
 - lower confidence gate
 - wider stops and larger take-profit brackets

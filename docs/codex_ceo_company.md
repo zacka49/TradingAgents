@@ -61,12 +61,14 @@ orders every few seconds so the terminal does not go quiet while trades are live
 
 Strategy profiles:
 
-- `safe`: up to about `$1,000` per new paper order, up to 10% paper-account
-  deployment by default on a `$100k` paper account, higher confidence threshold,
-  tighter stops, and blocks wider-spread/high-volatility/weak-backtest setups.
-- `risky`: up to about `$2,500` per new paper order, up to 25% paper-account
-  deployment by default on a `$100k` paper account, lower confidence threshold,
-  wider stops, larger take-profit brackets, and permits more momentum breakouts.
+- `safe`: minimum `$2,000` target notional per new paper order, up to about
+  `$3,000` per new paper order, up to 20% paper-account deployment by default
+  on a `$100k` paper account, higher confidence threshold, tighter stops, and
+  blocks wider-spread/high-volatility/weak-backtest setups.
+- `risky`: minimum `$2,000` target notional per new paper order, up to about
+  `$5,000` per new paper order, up to 30% paper-account deployment by default
+  on a `$100k` paper account, lower confidence threshold, wider stops, larger
+  take-profit brackets, and permits more momentum breakouts.
 
 Realtime data path:
 
