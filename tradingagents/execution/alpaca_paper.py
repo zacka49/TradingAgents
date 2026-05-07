@@ -108,6 +108,20 @@ class AlpacaPaperBroker(PaperBroker):
         resp.raise_for_status()
         return {"orders": resp.json()}
 
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        resp = requests.delete(
+            f"{self.base_url}/v2/orders/{order_id}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        if getattr(resp, "text", ""):
+            try:
+                return resp.json()
+            except ValueError:
+                return {"id": order_id, "status": "canceled"}
+        return {"id": order_id, "status": "canceled"}
+
     def close_all_positions(self, cancel_orders: bool = True) -> Dict[str, Any]:
         resp = requests.delete(
             f"{self.base_url}/v2/positions",

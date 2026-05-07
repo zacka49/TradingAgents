@@ -126,6 +126,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--flatten-minutes-before-close", type=int, default=5)
     parser.add_argument("--stop-new-entries-minutes-before-close", type=int, default=15)
     parser.add_argument("--no-flatten-on-max-cycles", action="store_true")
+    parser.add_argument("--disable-profit-protection", action="store_true")
+    parser.add_argument("--profit-protection-min-gain-pct", type=float, default=0.75)
+    parser.add_argument("--profit-protection-max-giveback-pct", type=float, default=0.60)
+    parser.add_argument("--profit-protection-max-giveback-fraction", type=float, default=0.50)
+    parser.add_argument("--disable-unprotected-position-exit", action="store_true")
+    parser.add_argument("--unprotected-position-grace-seconds", type=int, default=60)
     parser.add_argument("--disable-news-politics", action="store_true")
     parser.add_argument("--news-max-symbols", type=int, default=None)
     parser.add_argument(
@@ -168,6 +174,12 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         flatten_minutes_before_close=args.flatten_minutes_before_close,
         stop_new_entries_minutes_before_close=args.stop_new_entries_minutes_before_close,
         flatten_on_max_cycles=not bool(args.no_flatten_on_max_cycles),
+        protect_intraday_profits=not bool(args.disable_profit_protection),
+        profit_protection_min_gain_pct=args.profit_protection_min_gain_pct,
+        profit_protection_max_giveback_pct=args.profit_protection_max_giveback_pct,
+        profit_protection_max_giveback_fraction=args.profit_protection_max_giveback_fraction,
+        exit_unprotected_positions=not bool(args.disable_unprotected_position_exit),
+        unprotected_position_grace_seconds=args.unprotected_position_grace_seconds,
     )
 
 
@@ -301,6 +313,16 @@ def terminal_message(payload: Dict[str, Any]) -> str:
     if event == "autonomous_ceo_position_monitor":
         positions_count = payload.get("positions_count", 0)
         open_orders_count = payload.get("open_orders_count", 0)
+        exits = payload.get("risk_exits", [])
+        exit_text = ""
+        if exits:
+            submitted = [
+                f"{exit_event.get('symbol')} ({exit_event.get('reason')})"
+                for exit_event in exits
+                if exit_event.get("submitted")
+            ]
+            if submitted:
+                exit_text = f" Profit protection submitted exits: {', '.join(submitted)}."
         if positions_count:
             symbols = ", ".join(
                 str(position.get("symbol"))
@@ -312,11 +334,13 @@ def terminal_message(payload: Dict[str, Any]) -> str:
                 f"Open positions: {positions_count} ({symbols}). "
                 f"Open orders/brackets: {open_orders_count}. "
                 f"Next full strategy scan in {payload.get('seconds_to_next_cycle')}s."
+                f"{exit_text}"
             )
         return (
             "Monitoring live risk. No open positions right now. "
             f"Open orders/brackets: {open_orders_count}. "
             f"Next full strategy scan in {payload.get('seconds_to_next_cycle')}s."
+            f"{exit_text}"
         )
     if event == "autonomous_ceo_position_monitor_error":
         return (

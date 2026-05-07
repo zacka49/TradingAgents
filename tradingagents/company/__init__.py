@@ -10,6 +10,7 @@ from .codex_ceo_company import (
 from .autonomous_ceo import (
     AutonomousCEOSettings,
     AutonomousPaperCEOAgent,
+    open_sell_quantity_by_symbol,
     parse_universe,
     profiles_from_choice,
 )
@@ -35,5 +36,6 @@ __all__ = [
     "render_technology_scout_report",
     "parse_universe",
     "profiles_from_choice",
+    "open_sell_quantity_by_symbol",
     "run_momentum_smoke_backtest",
 ]

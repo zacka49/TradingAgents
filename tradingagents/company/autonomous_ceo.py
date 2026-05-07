@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -11,7 +12,7 @@ from typing import Any, Callable, Dict, List, Sequence
 from tradingagents.company.codex_ceo_company import CodexCEOCompanyRunner
 from tradingagents.company.strategy_profiles import apply_day_trader_profile
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.execution import AlpacaPaperBroker
+from tradingagents.execution import AlpacaPaperBroker, OrderIntent
 
 
 EventSink = Callable[[Dict[str, Any]], None]
@@ -48,6 +49,16 @@ class AutonomousCEOSettings:
     stop_new_entries_minutes_before_close: int = 15
     flatten_on_max_cycles: bool = True
     cancel_orders_before_flatten: bool = True
+    protect_intraday_profits: bool = True
+    profit_protection_min_gain_pct: float = 0.75
+    profit_protection_max_giveback_pct: float = 0.60
+    profit_protection_max_giveback_fraction: float = 0.50
+    profit_protection_min_remaining_gain_pct: float = 0.05
+    profit_protection_min_unrealized_pl_usd: float = 5.0
+    profit_protection_min_notional_usd: float = 100.0
+    exit_unprotected_positions: bool = True
+    unprotected_position_grace_seconds: int = 60
+    open_sell_coverage_threshold: float = 0.95
 
 
 class AutonomousPaperCEOAgent:
@@ -76,6 +87,9 @@ class AutonomousPaperCEOAgent:
         )
         self.sleep_fn = sleep_fn
         self.now_fn = now_fn or (lambda: datetime.now(UTC))
+        self.position_highs: Dict[str, float] = {}
+        self.unprotected_since: Dict[str, float] = {}
+        self.exit_submitted_symbols: set[str] = set()
 
     def run(self, event_sink: EventSink | None = None) -> int:
         sink = event_sink or print_json_event
@@ -390,7 +404,7 @@ class AutonomousPaperCEOAgent:
         except Exception:
             open_orders = []
 
-        return {
+        event = {
             "event": "autonomous_ceo_position_monitor",
             "cycle": cycle,
             "seconds_to_next_cycle": round(max(0.0, seconds_to_next_cycle), 1),
@@ -399,6 +413,297 @@ class AutonomousPaperCEOAgent:
             "positions": summarize_positions(positions),
             "open_orders": summarize_open_orders(open_orders),
         }
+        risk_exits = self.apply_day_trader_exit_policy(positions, open_orders)
+        if risk_exits:
+            event["risk_exits"] = risk_exits
+        return event
+
+    def apply_day_trader_exit_policy(
+        self,
+        positions: Sequence[Dict[str, Any]],
+        open_orders: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if not (
+            self.settings.protect_intraday_profits
+            or self.settings.exit_unprotected_positions
+        ):
+            return []
+
+        try:
+            clock = self.broker.get_clock()
+        except Exception as exc:
+            return [
+                {
+                    "event": "day_trader_exit_policy_error",
+                    "stage": "get_clock",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            ]
+        if not clock.get("is_open"):
+            return []
+
+        open_sell_qty = open_sell_quantity_by_symbol(open_orders)
+        current_symbols = {
+            str(position.get("symbol", "")).upper()
+            for position in positions
+            if position.get("symbol")
+        }
+        self.exit_submitted_symbols.intersection_update(current_symbols)
+        for symbol in list(self.unprotected_since):
+            if symbol not in current_symbols:
+                self.unprotected_since.pop(symbol, None)
+        for symbol in list(self.position_highs):
+            if symbol not in current_symbols:
+                self.position_highs.pop(symbol, None)
+
+        exits: List[Dict[str, Any]] = []
+        now_ts = self.now_fn().timestamp()
+        for position in positions:
+            symbol = str(position.get("symbol", "")).upper()
+            if not symbol or symbol in self.exit_submitted_symbols:
+                continue
+
+            qty = abs(safe_float(position.get("qty")))
+            current_price = safe_float(position.get("current_price"))
+            market_value = abs(safe_float(position.get("market_value")))
+            avg_entry = safe_float(position.get("avg_entry_price"))
+            unrealized_pl = safe_float(position.get("unrealized_pl"))
+            if qty <= 0 or current_price <= 0:
+                continue
+            if market_value <= 0:
+                market_value = qty * current_price
+
+            high = max(self.position_highs.get(symbol, 0.0), current_price, avg_entry)
+            self.position_highs[symbol] = high
+
+            exit_event = self._profit_giveback_exit(
+                symbol=symbol,
+                qty=qty,
+                current_price=current_price,
+                market_value=market_value,
+                avg_entry=avg_entry,
+                high=high,
+                unrealized_pl=unrealized_pl,
+                open_orders=open_orders,
+            )
+            if exit_event is not None:
+                exits.append(exit_event)
+                continue
+
+            exit_event = self._unprotected_position_exit(
+                symbol=symbol,
+                qty=qty,
+                current_price=current_price,
+                market_value=market_value,
+                protected_qty=open_sell_qty.get(symbol, 0.0),
+                now_ts=now_ts,
+            )
+            if exit_event is not None:
+                exits.append(exit_event)
+
+        return exits
+
+    def _profit_giveback_exit(
+        self,
+        *,
+        symbol: str,
+        qty: float,
+        current_price: float,
+        market_value: float,
+        avg_entry: float,
+        high: float,
+        unrealized_pl: float,
+        open_orders: Sequence[Dict[str, Any]],
+    ) -> Dict[str, Any] | None:
+        if not self.settings.protect_intraday_profits:
+            return None
+        if avg_entry <= 0 or high <= avg_entry:
+            return None
+        if market_value < float(self.settings.profit_protection_min_notional_usd):
+            return None
+        if unrealized_pl < float(self.settings.profit_protection_min_unrealized_pl_usd):
+            return None
+
+        high_gain_pct = (high - avg_entry) / avg_entry * 100.0
+        current_gain_pct = (current_price - avg_entry) / avg_entry * 100.0
+        giveback_pct = (high - current_price) / high * 100.0 if high > 0 else 0.0
+        giveback_fraction = (
+            (high - current_price) / (high - avg_entry)
+            if high > avg_entry
+            else 0.0
+        )
+
+        if high_gain_pct < float(self.settings.profit_protection_min_gain_pct):
+            return None
+        if current_gain_pct < float(
+            self.settings.profit_protection_min_remaining_gain_pct
+        ):
+            return None
+        if not (
+            giveback_pct >= float(self.settings.profit_protection_max_giveback_pct)
+            or giveback_fraction
+            >= float(self.settings.profit_protection_max_giveback_fraction)
+        ):
+            return None
+
+        return self._submit_position_exit(
+            symbol=symbol,
+            qty=qty,
+            current_price=current_price,
+            reason="profit_giveback",
+            cancel_symbol_orders=True,
+            open_orders=open_orders,
+            metrics={
+                "avg_entry_price": round(avg_entry, 4),
+                "high_watermark": round(high, 4),
+                "high_gain_pct": round(high_gain_pct, 3),
+                "current_gain_pct": round(current_gain_pct, 3),
+                "giveback_from_high_pct": round(giveback_pct, 3),
+                "giveback_fraction": round(giveback_fraction, 3),
+                "unrealized_pl": round(unrealized_pl, 2),
+            },
+        )
+
+    def _unprotected_position_exit(
+        self,
+        *,
+        symbol: str,
+        qty: float,
+        current_price: float,
+        market_value: float,
+        protected_qty: float,
+        now_ts: float,
+    ) -> Dict[str, Any] | None:
+        if not self.settings.exit_unprotected_positions:
+            self.unprotected_since.pop(symbol, None)
+            return None
+        threshold = max(0.0, min(1.0, float(self.settings.open_sell_coverage_threshold)))
+        protected_fraction = protected_qty / qty if qty > 0 else 0.0
+        if protected_fraction >= threshold:
+            self.unprotected_since.pop(symbol, None)
+            return None
+
+        unprotected_qty = max(0.0, qty - protected_qty)
+        if unprotected_qty <= 0:
+            return None
+        unprotected_notional = unprotected_qty * current_price
+        if unprotected_notional < float(self.settings.profit_protection_min_notional_usd):
+            return None
+
+        first_seen = self.unprotected_since.setdefault(symbol, now_ts)
+        grace = max(0, int(self.settings.unprotected_position_grace_seconds))
+        unprotected_seconds = now_ts - first_seen
+        if unprotected_seconds < grace:
+            return None
+
+        reason = "unprotected_position" if protected_qty <= 0 else "unprotected_remainder"
+        return self._submit_position_exit(
+            symbol=symbol,
+            qty=unprotected_qty if protected_qty > 0 else qty,
+            current_price=current_price,
+            reason=reason,
+            cancel_symbol_orders=False,
+            open_orders=[],
+            metrics={
+                "position_qty": round(qty, 4),
+                "protected_qty": round(protected_qty, 4),
+                "protected_fraction": round(protected_fraction, 3),
+                "unprotected_seconds": round(unprotected_seconds, 1),
+            },
+        )
+
+    def _submit_position_exit(
+        self,
+        *,
+        symbol: str,
+        qty: float,
+        current_price: float,
+        reason: str,
+        cancel_symbol_orders: bool,
+        open_orders: Sequence[Dict[str, Any]],
+        metrics: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        exit_qty = floor_quantity(qty)
+        if exit_qty <= 0:
+            return {
+                "event": "day_trader_position_exit_skipped",
+                "symbol": symbol,
+                "reason": reason,
+                "blocked_reason": "quantity_too_small",
+                **metrics,
+            }
+
+        cancel_events: List[Dict[str, Any]] = []
+        if cancel_symbol_orders:
+            cancel_events = self._cancel_symbol_open_orders(symbol, open_orders)
+
+        intent = OrderIntent(ticker=symbol, side="sell", quantity=exit_qty)
+        event: Dict[str, Any] = {
+            "event": "day_trader_position_exit_submitted",
+            "symbol": symbol,
+            "side": "sell",
+            "quantity": exit_qty,
+            "estimated_notional_usd": round(exit_qty * current_price, 2),
+            "reason": reason,
+            "cancelled_orders": cancel_events,
+            **metrics,
+        }
+        try:
+            response = self.broker.submit_order(intent)
+            self.exit_submitted_symbols.add(symbol)
+            self.unprotected_since.pop(symbol, None)
+            event["submitted"] = True
+            event["order_response"] = response
+        except Exception as exc:
+            event["submitted"] = False
+            event["blocked_reason"] = f"submit_failed_{type(exc).__name__}"
+            event["error"] = str(exc)
+        return event
+
+    def _cancel_symbol_open_orders(
+        self,
+        symbol: str,
+        open_orders: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        cancel_order = getattr(self.broker, "cancel_order", None)
+        if not callable(cancel_order):
+            return [
+                {
+                    "symbol": symbol,
+                    "status": "not_cancelled",
+                    "reason": "broker_cancel_order_unavailable",
+                }
+            ]
+
+        events = []
+        for order in open_orders:
+            if str(order.get("symbol", "")).upper() != symbol:
+                continue
+            order_id = order.get("id")
+            if not order_id:
+                continue
+            try:
+                response = cancel_order(str(order_id))
+                events.append(
+                    {
+                        "id": str(order_id),
+                        "symbol": symbol,
+                        "status": "cancel_requested",
+                        "response": response,
+                    }
+                )
+            except Exception as exc:
+                events.append(
+                    {
+                        "id": str(order_id),
+                        "symbol": symbol,
+                        "status": "cancel_failed",
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    }
+                )
+        return events
 
     def _profile_config(self, profile: str) -> Dict[str, Any]:
         config = apply_day_trader_profile(self.base_config, profile)
@@ -459,6 +764,45 @@ def parse_alpaca_time(value: str | None) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def floor_quantity(value: float, precision: int = 4) -> float:
+    factor = 10**precision
+    return math.floor(max(0.0, float(value)) * factor) / factor
+
+
+def open_sell_quantity_by_symbol(
+    orders: Sequence[Dict[str, Any]],
+) -> Dict[str, float]:
+    quantities: Dict[str, float] = {}
+    open_like_statuses = {"accepted", "new", "pending_new", "partially_filled", "held"}
+    for order in orders:
+        symbol = str(order.get("symbol", "")).upper()
+        if not symbol:
+            continue
+        candidates = order.get("legs") or [order]
+        sell_quantities = []
+        for candidate in candidates:
+            side = str(candidate.get("side", "")).lower()
+            status = str(candidate.get("status", "")).lower()
+            if side == "sell" and status in open_like_statuses:
+                sell_quantities.append(
+                    max(
+                        0.0,
+                        safe_float(candidate.get("qty"))
+                        - safe_float(candidate.get("filled_qty")),
+                    )
+                )
+        if sell_quantities:
+            quantities[symbol] = quantities.get(symbol, 0.0) + max(sell_quantities)
+    return quantities
 
 
 def print_json_event(payload: Dict[str, Any]) -> None:

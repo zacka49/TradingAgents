@@ -38,5 +38,8 @@ class PaperBroker:
     def cancel_all_orders(self) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        raise NotImplementedError
+
     def close_all_positions(self, cancel_orders: bool = True) -> Dict[str, Any]:
         raise NotImplementedError

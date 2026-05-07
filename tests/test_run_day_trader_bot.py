@@ -28,6 +28,8 @@ def test_vs_code_launcher_defaults_run_full_bot_until_close():
     assert settings.flatten_at_close is True
     assert settings.flatten_minutes_before_close == 5
     assert settings.stop_new_entries_minutes_before_close == 15
+    assert settings.protect_intraday_profits is True
+    assert settings.exit_unprotected_positions is True
     assert "QQQ" in settings.universe
     assert "SPY" in settings.universe
     assert "UUP" in settings.universe
@@ -82,3 +84,25 @@ def test_vs_code_launcher_terminal_message_mentions_live_monitor():
     assert "Monitoring live risk" in message
     assert "NVDA" in message
     assert "Next full strategy scan in 5.0s" in message
+
+
+def test_vs_code_launcher_terminal_message_mentions_profit_exit():
+    launcher = _load_launcher_module()
+    message = launcher.terminal_message(
+        {
+            "event": "autonomous_ceo_position_monitor",
+            "positions_count": 1,
+            "open_orders_count": 1,
+            "positions": [{"symbol": "NVDA"}],
+            "seconds_to_next_cycle": 5.0,
+            "risk_exits": [
+                {
+                    "symbol": "NVDA",
+                    "reason": "profit_giveback",
+                    "submitted": True,
+                }
+            ],
+        }
+    )
+
+    assert "Profit protection submitted exits: NVDA (profit_giveback)" in message

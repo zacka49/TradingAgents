@@ -44,3 +44,19 @@ def test_alpaca_paper_cancel_all_orders(monkeypatch):
 
     assert response == {"orders": [{"id": "order-1", "status": 200}]}
     assert calls == [("https://paper-api.alpaca.markets/v2/orders", None)]
+
+
+def test_alpaca_paper_cancel_order(monkeypatch):
+    calls = []
+
+    def fake_delete(url, headers, params=None, timeout=20):
+        calls.append((url, params))
+        return _FakeResponse({"id": "order-1", "status": "canceled"})
+
+    monkeypatch.setattr("tradingagents.execution.alpaca_paper.requests.delete", fake_delete)
+
+    broker = AlpacaPaperBroker(api_key="key", api_secret="secret", base_url="https://paper-api.alpaca.markets")
+    response = broker.cancel_order("order-1")
+
+    assert response == {"id": "order-1", "status": "canceled"}
+    assert calls == [("https://paper-api.alpaca.markets/v2/orders/order-1", None)]

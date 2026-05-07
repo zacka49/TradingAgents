@@ -10,6 +10,12 @@ By default it now behaves as a strict day trader: it stops opening new positions
 the paper account 5 minutes before the close. Disable this only for an explicit
 swing/overnight experiment.
 
+The live position monitor also protects intraday gains. It tracks each open
+position's high-watermark while the bot is running and can submit a market sell
+when a winner gives back too much profit. It also exits unprotected position
+remainders, such as fractional leftovers or stale day-trading holdings that no
+longer have enough open sell-order coverage.
+
 ## Environment
 
 Required:
@@ -97,6 +103,20 @@ Close-discipline knobs:
 Use `--disable-flatten-at-close` only when you explicitly want to test overnight
 carry behavior. Use `--no-flatten-on-max-cycles` only when a bounded test run
 should leave the paper account untouched after the final cycle.
+
+Profit-protection knobs:
+
+```powershell
+.\.venv\Scripts\python.exe run_day_trader_bot.py `
+  --profit-protection-min-gain-pct 0.75 `
+  --profit-protection-max-giveback-pct 0.60 `
+  --profit-protection-max-giveback-fraction 0.50 `
+  --unprotected-position-grace-seconds 60
+```
+
+Use `--disable-profit-protection` only when comparing static bracket exits.
+Use `--disable-unprotected-position-exit` only when intentionally allowing
+manual or overnight leftovers to remain in the paper account.
 
 ## Profiles
 

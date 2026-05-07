@@ -25,6 +25,10 @@ The day-trader system should behave like a small trading business:
 - Stop new entries before the closing window.
 - Cancel open orders before flattening.
 - Close all open intraday positions before the market close.
+- Protect intraday winners: after a position has moved in favor, monitor its
+  high-watermark and sell when the giveback breaches the configured threshold.
+- Do not leave unprotected remainders: fractional leftovers or positions without
+  adequate open sell-order coverage should be exited in day-trading mode.
 - No autonomous trade without fresh price, clean spread, sufficient volume, and
   a named strategy.
 - News and politics can expand the watchlist, but cannot authorize a trade by
