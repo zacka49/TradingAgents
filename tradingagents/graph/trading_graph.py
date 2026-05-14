@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 from langgraph.prebuilt import ToolNode
 
-from tradingagents.llm_clients import create_llm_client
+from tradingagents.llm_clients import apply_compute_policy, create_llm_client
 from tradingagents.execution import (
     AlpacaPaperBroker,
     decision_to_order_intent,
@@ -88,7 +88,7 @@ class TradingAgentsGraph:
             callbacks: Optional list of callback handlers (e.g., for tracking LLM/tool stats)
         """
         self.debug = debug
-        self.config = config or DEFAULT_CONFIG
+        self.config = apply_compute_policy(config or DEFAULT_CONFIG)
         self.callbacks = callbacks or []
 
         # Update the interface's config

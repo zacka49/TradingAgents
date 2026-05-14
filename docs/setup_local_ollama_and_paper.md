@@ -20,6 +20,18 @@ Use this progression:
 2. `qwen3:4b` once disk space is freed
 3. `qwen3:8b` or `gpt-oss:20b` only when RAM/VRAM and disk headroom are sufficient
 
+The runtime now enforces a local-first compute policy. Hosted LLM providers and
+Ollama `:cloud` models are blocked unless both opt-in environment variables are
+set:
+
+```powershell
+$env:TRADINGAGENTS_ALLOW_ONLINE_LLM = "1"
+$env:TRADINGAGENTS_LLM_BUDGET_MODE = "allow_online"
+```
+
+See [local_first_compute_policy.md](/D:/AI%20projects/Git%20repo%20for%20inspection/TradingAgents/docs/local_first_compute_policy.md)
+for the guardrails and model priority ladder.
+
 Reference model sizes and capabilities:
 - Qwen3 library page (sizes + tool support)
 - GPT-OSS library page (sizes + memory guidance)

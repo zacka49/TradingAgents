@@ -8,12 +8,17 @@ DEFAULT_CONFIG = {
     "data_cache_dir": os.getenv("TRADINGAGENTS_CACHE_DIR", os.path.join(_TRADINGAGENTS_HOME, "cache")),
     "memory_log_path": os.getenv("TRADINGAGENTS_MEMORY_LOG_PATH", os.path.join(_TRADINGAGENTS_HOME, "memory", "trading_memory.md")),
     "training_memory_log_path": os.getenv("TRADINGAGENTS_TRAINING_MEMORY_LOG_PATH", os.path.join(_TRADINGAGENTS_HOME, "memory", "agent_training_memory.md")),
+    "specialist_memory_dir": os.getenv("TRADINGAGENTS_SPECIALIST_MEMORY_DIR", os.path.join(_TRADINGAGENTS_HOME, "memory", "specialists")),
     # Optional cap on the number of resolved memory log entries. When set,
     # the oldest resolved entries are pruned once this limit is exceeded.
     # Pending entries are never pruned. None disables rotation entirely.
     "memory_log_max_entries": None,
     "training_memory_max_entries": 10,
     "training_memory_context_entries": 3,
+    "specialist_memory_max_entries": 30,
+    "specialist_memory_context_entries": 2,
+    "specialist_memory_enabled": True,
+    "agent_scorecards_enabled": True,
     # Persist comprehensive per-run artifacts (state, decision, reports) under
     # results_dir/<ticker>/<trade_date>/<run_id>/.
     "save_run_artifacts": True,
@@ -29,6 +34,33 @@ DEFAULT_CONFIG = {
     "llm_provider": os.getenv("TRADINGAGENTS_LLM_PROVIDER", "ollama"),
     "deep_think_llm": os.getenv("TRADINGAGENTS_DEEP_MODEL", os.getenv("OLLAMA_DEEP_MODEL", "qwen3:0.6b")),
     "quick_think_llm": os.getenv("TRADINGAGENTS_QUICK_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:0.6b")),
+    # Local-first compute policy. Hosted LLM providers and Ollama cloud models
+    # are blocked by default so iterative runs do not quietly burn token quota.
+    # To opt in deliberately, set:
+    #   TRADINGAGENTS_ALLOW_ONLINE_LLM=1
+    #   TRADINGAGENTS_LLM_BUDGET_MODE=allow_online
+    "llm_budget_mode": os.getenv("TRADINGAGENTS_LLM_BUDGET_MODE", "local_only"),
+    "allow_online_llm": os.getenv("TRADINGAGENTS_ALLOW_ONLINE_LLM", "").strip().lower()
+    in {"1", "true", "yes", "y", "on"},
+    "ollama_model_probe_timeout_seconds": 1.0,
+    "local_quick_model_priority": [
+        "qwen3:8b",
+        "qwen3:latest",
+        "qwen3:4b",
+        "qwen3:1.7b",
+        "qwen3:0.6b",
+    ],
+    "local_deep_model_priority": [
+        "gpt-oss:20b",
+        "gpt-oss:latest",
+        "qwen3:30b",
+        "qwen3:32b",
+        "qwen3:14b",
+        "qwen3:8b",
+        "qwen3:latest",
+        "qwen3:4b",
+        "qwen3:0.6b",
+    ],
     # When None, each provider's client falls back to its own default endpoint
     # (api.openai.com for OpenAI, generativelanguage.googleapis.com for Gemini, ...).
     # The CLI overrides this per provider when the user picks one. Keeping a
@@ -37,7 +69,7 @@ DEFAULT_CONFIG = {
     "backend_url": None,
     # Provider-specific thinking configuration
     "google_thinking_level": None,      # "high", "minimal", etc.
-    "openai_reasoning_effort": None,    # "medium", "high", "low"
+    "openai_reasoning_effort": None,    # "xhigh", "high", "medium", "low"
     "anthropic_effort": None,           # "high", "medium", "low"
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
@@ -93,6 +125,8 @@ DEFAULT_CONFIG = {
     "codex_ceo_news_political_fallback_to_base": True,
     "codex_ceo_news_catalyst_score_bonus": 0.25,
     "codex_ceo_news_catalyst_max_bonus": 1.5,
+    "codex_ceo_news_day_trade_fit_bonus": 0.20,
+    "codex_ceo_news_day_trade_fit_max_bonus": 2.0,
     "strategy_profile_name": "balanced",
     "codex_ceo_realtime_scan_enabled": False,
     "codex_ceo_realtime_fallback_to_daily": True,
@@ -102,6 +136,11 @@ DEFAULT_CONFIG = {
     "codex_ceo_realtime_high_volatility_pct": 0.85,
     "codex_ceo_realtime_max_trade_age_seconds": 180,
     "codex_ceo_order_flow_enrichment_limit": 6,
+    "codex_ceo_day_trade_min_fit_score": 0.0,
+    "codex_ceo_day_trade_preferred_min_volume_ratio": 1.05,
+    "codex_ceo_day_trade_preferred_min_volatility_pct": 0.6,
+    "codex_ceo_day_trade_preferred_max_volatility_pct": 4.5,
+    "codex_ceo_day_trade_min_abs_move_pct": 1.0,
     "alpaca_data_timeout_seconds": 20,
     "portfolio_target_positions": 5,
     "portfolio_deploy_pct": 0.60,

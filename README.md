@@ -95,7 +95,7 @@ See [docs/research_department.md](docs/research_department.md) for the recommend
 
 ### Codex CEO Company Mode
 - Codex CEO mode is the compute-light daily operating layer: deterministic market screening, one optional local Ollama staff memo, a `ceo_briefing_pack.md`, and guarded Alpaca paper-order planning.
-- It defaults to local Ollama (`qwen3:0.6b`) for weak GPU/CPU setups. Autonomous paper mode can skip the CEO approval gate while preserving market-open, size, liquidity, and strategy-confidence gates.
+- It defaults to local-only Ollama compute. Hosted LLM providers and Ollama `:cloud` models are blocked unless explicitly opted in, so repeated business runs do not quietly burn hosted token quota.
 - A lightweight Backtest Lab uses Backtrader over already-loaded daily bars to sanity-check momentum candidates before target weights are selected.
 - Each run can also include a Technology Scout report that tracks useful external systems such as TradingAgents upstream, FinRobot, FinGPT, LEAN, Backtrader, OpenBB, LangGraph, and OpenAI Agents/Responses.
 
@@ -103,7 +103,7 @@ See [docs/research_department.md](docs/research_department.md) for the recommend
 .\.venv\Scripts\python.exe scripts\run_codex_ceo_company.py --results-dir results
 ```
 
-See [docs/codex_ceo_company.md](docs/codex_ceo_company.md) for autonomous paper submission, technology scouting, day-trading strategy rules, and efficiency controls.
+See [docs/codex_ceo_company.md](docs/codex_ceo_company.md) for autonomous paper submission, technology scouting, day-trading strategy rules, and efficiency controls. See [docs/local_first_compute_policy.md](docs/local_first_compute_policy.md) for the local-first LLM guardrails and [docs/agent_learning_loop.md](docs/agent_learning_loop.md) for post-market scorecards and specialist memory.
 
 ### Trader Agent
 - Composes reports from the analysts and researchers to make informed trading decisions. It determines the timing and magnitude of trades based on comprehensive market insights.

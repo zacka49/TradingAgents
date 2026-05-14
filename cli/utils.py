@@ -232,17 +232,17 @@ def select_llm_provider() -> tuple[str, str | None]:
     """Select the LLM provider and its API endpoint."""
     # (display_name, provider_key, base_url)
     PROVIDERS = [
-        ("OpenAI", "openai", "https://api.openai.com/v1"),
-        ("Google", "google", None),
-        ("Anthropic", "anthropic", "https://api.anthropic.com/"),
-        ("xAI", "xai", "https://api.x.ai/v1"),
-        ("DeepSeek", "deepseek", "https://api.deepseek.com"),
-        ("Qwen", "qwen", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-        ("GLM", "glm", "https://open.bigmodel.cn/api/paas/v4/"),
-        ("OpenRouter", "openrouter", "https://openrouter.ai/api/v1"),
-        ("Groq", "groq", "https://api.groq.com/openai/v1"),
-        ("Azure OpenAI", "azure", None),
-        ("Ollama", "ollama", "http://localhost:11434/v1"),
+        ("Ollama (local, no cloud token spend)", "ollama", "http://localhost:11434/v1"),
+        ("OpenAI (hosted, opt-in)", "openai", "https://api.openai.com/v1"),
+        ("Google (hosted, opt-in)", "google", None),
+        ("Anthropic (hosted, opt-in)", "anthropic", "https://api.anthropic.com/"),
+        ("xAI (hosted, opt-in)", "xai", "https://api.x.ai/v1"),
+        ("DeepSeek (hosted, opt-in)", "deepseek", "https://api.deepseek.com"),
+        ("Qwen (hosted, opt-in)", "qwen", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        ("GLM (hosted, opt-in)", "glm", "https://open.bigmodel.cn/api/paas/v4/"),
+        ("OpenRouter (hosted, opt-in)", "openrouter", "https://openrouter.ai/api/v1"),
+        ("Groq (hosted, opt-in/rate-limited)", "groq", "https://api.groq.com/openai/v1"),
+        ("Azure OpenAI (hosted, opt-in)", "azure", None),
     ]
 
     choice = questionary.select(
@@ -272,8 +272,10 @@ def select_llm_provider() -> tuple[str, str | None]:
 def ask_openai_reasoning_effort() -> str:
     """Ask for OpenAI reasoning effort level."""
     choices = [
+        questionary.Choice("None (let the model default)", None),
         questionary.Choice("Medium (Default)", "medium"),
         questionary.Choice("High (More thorough)", "high"),
+        questionary.Choice("XHigh (maximum reasoning)", "xhigh"),
         questionary.Choice("Low (Faster)", "low"),
     ]
     return questionary.select(

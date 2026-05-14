@@ -11,14 +11,16 @@ from tradingagents.dataflows.utils import safe_ticker_component
 
 
 DEFAULT_NEWS_POLITICS_QUERIES = [
-    "market moving stock news today",
-    "Federal Reserve inflation rates stocks",
-    "tariffs trade policy semiconductor stocks",
-    "geopolitics defense energy stocks",
-    "crypto regulation bitcoin stocks",
-    "US dollar forex currency market stocks",
-    "AI chips data center stocks",
-    "healthcare FDA Medicare drug stocks",
+    "premarket stock movers news today earnings guidance",
+    "stocks moving premarket analyst upgrades downgrades today",
+    "market moving stock news today mergers FDA regulatory approval",
+    "Federal Reserve inflation jobs report rates stocks today",
+    "tariffs trade policy semiconductor stocks today",
+    "geopolitics defense energy oil stocks today",
+    "crypto regulation bitcoin stocks premarket",
+    "US dollar forex currency market stocks today",
+    "AI chips data center stocks earnings guidance",
+    "healthcare FDA Medicare drug stocks clinical trial today",
 ]
 
 
@@ -158,8 +160,133 @@ NEWS_RISK_KEYWORDS = [
     "bankruptcy",
     "recall",
     "trading halt",
+    "halted",
     "guidance cut",
     "downgrade",
+    "secondary offering",
+    "registered direct",
+    "dilution",
+    "going concern",
+    "delisting",
+    "buyout",
+    "acquisition agreement",
+]
+
+
+DAY_TRADE_CATALYST_RULES: Dict[str, Dict[str, Any]] = {
+    "earnings_guidance": {
+        "keywords": [
+            "earnings",
+            "revenue",
+            "profit",
+            "guidance",
+            "outlook",
+            "forecast",
+            "preliminary results",
+        ],
+        "weight": 4,
+    },
+    "analyst_action": {
+        "keywords": [
+            "upgrade",
+            "downgrade",
+            "price target",
+            "initiated",
+            "raised to",
+            "cut to",
+        ],
+        "weight": 3,
+    },
+    "merger_or_buyout": {
+        "keywords": [
+            "acquisition",
+            "merger",
+            "takeover",
+            "buyout",
+            "strategic alternatives",
+        ],
+        "weight": 2,
+    },
+    "regulatory_fda": {
+        "keywords": [
+            "fda",
+            "approval",
+            "clinical trial",
+            "phase 2",
+            "phase 3",
+            "medicare",
+            "regulatory",
+        ],
+        "weight": 4,
+    },
+    "macro_policy": {
+        "keywords": [
+            "federal reserve",
+            "fed ",
+            "cpi",
+            "ppi",
+            "jobs report",
+            "inflation",
+            "rate cut",
+            "rate hike",
+            "tariff",
+            "sanction",
+            "export control",
+        ],
+        "weight": 2,
+    },
+    "product_or_contract": {
+        "keywords": [
+            "launches",
+            "unveils",
+            "contract",
+            "partnership",
+            "wins order",
+            "data center",
+            "chip",
+            "gpu",
+        ],
+        "weight": 3,
+    },
+    "commodity_fx_crypto": {
+        "keywords": [
+            "oil",
+            "crude",
+            "gold",
+            "dollar",
+            "yen",
+            "euro",
+            "forex",
+            "bitcoin",
+            "ethereum",
+            "crypto",
+        ],
+        "weight": 2,
+    },
+}
+
+
+BULLISH_KEYWORDS = [
+    "beats",
+    "beat estimates",
+    "raises guidance",
+    "upgrade",
+    "approval",
+    "wins",
+    "surges",
+    "rallies",
+]
+
+
+BEARISH_KEYWORDS = [
+    "misses",
+    "cuts guidance",
+    "downgrade",
+    "probe",
+    "lawsuit",
+    "falls",
+    "slumps",
+    "recall",
 ]
 
 _SEARCH_CACHE_TTL = timedelta(minutes=5)
@@ -227,6 +354,95 @@ def _extract_direct_symbols(text: str, allowed_symbols: set[str]) -> List[str]:
     return sorted(matches)
 
 
+def _article_symbols(article: Dict[str, Any]) -> List[str]:
+    symbols: List[str] = []
+    for key in ("relatedTickers", "symbols", "tickers"):
+        raw = article.get(key)
+        if isinstance(raw, str):
+            symbols.append(raw)
+        elif isinstance(raw, Sequence):
+            symbols.extend(str(item) for item in raw)
+    content = article.get("content") if isinstance(article.get("content"), dict) else {}
+    for key in ("relatedTickers", "symbols", "tickers"):
+        raw = content.get(key)
+        if isinstance(raw, str):
+            symbols.append(raw)
+        elif isinstance(raw, Sequence):
+            symbols.extend(str(item) for item in raw)
+    return _clean_symbols(symbols)
+
+
+def _classify_day_trade_catalysts(lower_text: str) -> List[str]:
+    tags: List[str] = []
+    for tag, rule in DAY_TRADE_CATALYST_RULES.items():
+        keywords = [str(item).lower() for item in rule.get("keywords", [])]
+        if any(keyword in lower_text for keyword in keywords):
+            tags.append(tag)
+    return tags
+
+
+def _catalyst_weight(tags: Sequence[str]) -> int:
+    weights = [
+        int(DAY_TRADE_CATALYST_RULES.get(tag, {}).get("weight", 1))
+        for tag in tags
+    ]
+    return max(weights) if weights else 0
+
+
+def _direction_label(lower_text: str) -> str:
+    bullish = any(keyword in lower_text for keyword in BULLISH_KEYWORDS)
+    bearish = any(keyword in lower_text for keyword in BEARISH_KEYWORDS)
+    if bullish and bearish:
+        return "mixed"
+    if bullish:
+        return "bullish"
+    if bearish:
+        return "bearish"
+    return "unknown"
+
+
+def _risk_tags(lower_text: str) -> List[str]:
+    tags: List[str] = []
+    for keyword in NEWS_RISK_KEYWORDS:
+        if keyword in lower_text:
+            normalized = keyword.replace(" ", "_")
+            tags.append(normalized)
+    return sorted(set(tags))
+
+
+def _research_action(score: float, risk_tags: Sequence[str]) -> str:
+    if risk_tags:
+        return "risk_review"
+    if score >= 8:
+        return "priority_research"
+    if score >= 4:
+        return "confirm_at_open"
+    return "watch"
+
+
+def _build_thesis(
+    symbol: str,
+    *,
+    score: float,
+    catalysts: Sequence[str],
+    themes: Sequence[str],
+    direction: str,
+    risk_tags: Sequence[str],
+) -> str:
+    pieces = []
+    if catalysts:
+        pieces.append(", ".join(sorted(set(catalysts))[:3]))
+    if themes:
+        pieces.append("themes: " + ", ".join(sorted(set(themes))[:2]))
+    if not pieces:
+        pieces.append("headline/theme interest")
+    risk_text = f"; risks: {', '.join(sorted(set(risk_tags))[:3])}" if risk_tags else ""
+    return (
+        f"{symbol} pre-open research score {score:.1f}: "
+        f"{'; '.join(pieces)}; direction {direction}{risk_text}."
+    )
+
+
 def discover_news_politics_symbols(
     base_universe: Sequence[str],
     *,
@@ -249,9 +465,12 @@ def discover_news_politics_symbols(
     allowed_direct = set(base) | _theme_universe()
     scores: Counter[str] = Counter()
     catalysts_by_symbol: Dict[str, List[str]] = defaultdict(list)
+    catalyst_tags_by_symbol: Dict[str, List[str]] = defaultdict(list)
     themes_by_symbol: Dict[str, List[str]] = defaultdict(list)
     headlines_by_symbol: Dict[str, List[str]] = defaultdict(list)
     risk_headlines_by_symbol: Dict[str, List[str]] = defaultdict(list)
+    risk_tags_by_symbol: Dict[str, List[str]] = defaultdict(list)
+    directions_by_symbol: Dict[str, List[str]] = defaultdict(list)
     errors: List[str] = []
     seen_headlines: set[str] = set()
     article_count = 0
@@ -275,11 +494,21 @@ def discover_news_politics_symbols(
             lower_text = f" {text.lower()} "
             headline = f"{title} ({extracted['publisher']})"
             matched_symbols: set[str] = set()
+            catalyst_tags = _classify_day_trade_catalysts(lower_text)
+            catalyst_weight = _catalyst_weight(catalyst_tags)
+            direction = _direction_label(lower_text)
+            article_risk_tags = _risk_tags(lower_text)
 
-            direct_symbols = _extract_direct_symbols(text, allowed_direct)
+            direct_symbols = sorted(
+                set(_extract_direct_symbols(text, allowed_direct))
+                | set(_article_symbols(article))
+            )
             for symbol in direct_symbols:
-                scores[symbol] += 4
+                scores[symbol] += 4 + catalyst_weight
                 catalysts_by_symbol[symbol].append("direct_headline_match")
+                catalyst_tags_by_symbol[symbol].extend(catalyst_tags)
+                directions_by_symbol[symbol].append(direction)
+                risk_tags_by_symbol[symbol].extend(article_risk_tags)
                 matched_symbols.add(symbol)
 
             for theme_name, theme in THEME_TICKERS.items():
@@ -290,15 +519,18 @@ def discover_news_politics_symbols(
                     normalized = safe_ticker_component(str(symbol).upper())
                     if not normalized:
                         continue
-                    scores[normalized] += 1
+                    scores[normalized] += 1 + min(catalyst_weight, 2)
                     catalysts_by_symbol[normalized].append("news_policy_theme")
+                    catalyst_tags_by_symbol[normalized].extend(catalyst_tags)
                     themes_by_symbol[normalized].append(theme_name)
+                    directions_by_symbol[normalized].append(direction)
+                    risk_tags_by_symbol[normalized].extend(article_risk_tags)
                     matched_symbols.add(normalized)
 
             if not matched_symbols:
                 continue
 
-            is_risky = any(keyword in lower_text for keyword in NEWS_RISK_KEYWORDS)
+            is_risky = bool(article_risk_tags)
             for symbol in matched_symbols:
                 if len(headlines_by_symbol[symbol]) < 3:
                     headlines_by_symbol[symbol].append(headline)
@@ -311,6 +543,44 @@ def discover_news_politics_symbols(
         if symbol not in set(base)
     ]
     symbols = _clean_symbols([*base, *ranked_additions])[:max_symbols]
+    day_trade_research_by_symbol: Dict[str, Dict[str, Any]] = {}
+    for symbol in symbols:
+        score = float(scores.get(symbol, 0.0))
+        if score <= 0:
+            continue
+        catalyst_tags = sorted(set(catalyst_tags_by_symbol.get(symbol, [])))
+        themes = sorted(set(themes_by_symbol.get(symbol, [])))
+        risk_tags = sorted(set(risk_tags_by_symbol.get(symbol, [])))
+        directions = [
+            item
+            for item in directions_by_symbol.get(symbol, [])
+            if item and item != "unknown"
+        ]
+        direction = Counter(directions).most_common(1)[0][0] if directions else "unknown"
+        action = _research_action(score, risk_tags)
+        day_trade_research_by_symbol[symbol] = {
+            "symbol": symbol,
+            "score": round(score, 3),
+            "action": action,
+            "direction": direction,
+            "catalyst_tags": catalyst_tags,
+            "themes": themes,
+            "risk_tags": risk_tags,
+            "headlines": headlines_by_symbol.get(symbol, [])[:3],
+            "thesis": _build_thesis(
+                symbol,
+                score=score,
+                catalysts=catalyst_tags,
+                themes=themes,
+                direction=direction,
+                risk_tags=risk_tags,
+            ),
+        }
+
+    ranked_research_queue = sorted(
+        day_trade_research_by_symbol.values(),
+        key=lambda item: (-float(item["score"]), item["symbol"]),
+    )
 
     return {
         "symbols": symbols,
@@ -322,10 +592,26 @@ def discover_news_politics_symbols(
         "catalysts_by_symbol": {
             symbol: sorted(set(values)) for symbol, values in catalysts_by_symbol.items()
         },
+        "catalyst_tags_by_symbol": {
+            symbol: sorted(set(values)) for symbol, values in catalyst_tags_by_symbol.items()
+        },
         "themes_by_symbol": {
             symbol: sorted(set(values)) for symbol, values in themes_by_symbol.items()
         },
         "headlines_by_symbol": dict(headlines_by_symbol),
         "risk_headlines_by_symbol": dict(risk_headlines_by_symbol),
+        "risk_tags_by_symbol": {
+            symbol: sorted(set(values)) for symbol, values in risk_tags_by_symbol.items()
+        },
+        "directions_by_symbol": {
+            symbol: Counter(
+                item for item in values if item and item != "unknown"
+            ).most_common(1)[0][0]
+            if [item for item in values if item and item != "unknown"]
+            else "unknown"
+            for symbol, values in directions_by_symbol.items()
+        },
+        "day_trade_research_by_symbol": day_trade_research_by_symbol,
+        "ranked_research_queue": ranked_research_queue,
         "errors": errors,
     }

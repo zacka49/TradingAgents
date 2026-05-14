@@ -89,16 +89,25 @@ def run_momentum_smoke_backtest(
         drawdown = float(
             _nested_get(result.analyzers.drawdown.get_analysis(), ("max", "drawdown"), 0.0)
         )
-        trade_count = int(
+        closed_trade_count = int(
             _nested_get(result.analyzers.trades.get_analysis(), ("total", "closed"), 0)
         )
+        total_trade_count = int(
+            _nested_get(result.analyzers.trades.get_analysis(), ("total", "total"), 0)
+        )
+        trade_count = max(closed_trade_count, total_trade_count)
     except Exception as exc:  # pragma: no cover - defensive for vendor internals
         return _unavailable(ticker, f"Backtest failed: {type(exc).__name__}")
 
     passed = strategy_return >= min_strategy_return_pct and (
         strategy_return > 0.0 or excess_return >= min_excess_return_pct
     )
-    if passed and excess_return < min_excess_return_pct:
+    if trade_count <= 0:
+        passed = False
+        note = "Momentum smoke test produced no closed trades; evidence is insufficient"
+    elif closed_trade_count <= 0 and passed:
+        note = "Momentum smoke test passed with an open profitable position"
+    elif passed and excess_return < min_excess_return_pct:
         note = "Momentum smoke test positive but lagged buy-and-hold"
     elif passed:
         note = "Momentum smoke test passed"
@@ -147,6 +156,6 @@ def _unavailable(ticker: str, note: str) -> BacktestEvidence:
         excess_return_pct=0.0,
         max_drawdown_pct=0.0,
         trade_count=0,
-        passed=True,
+        passed=False,
         note=f"Backtest unavailable: {note}",
     )

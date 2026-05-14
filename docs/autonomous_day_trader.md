@@ -16,6 +16,22 @@ when a winner gives back too much profit. It also exits unprotected position
 remainders, such as fractional leftovers or stale day-trading holdings that no
 longer have enough open sell-order coverage.
 
+The monitor also cuts stale losers by default. If an intraday holding is down by
+the configured loss threshold, the bot cancels that symbol's working sell orders
+and submits a market sell instead of waiting for a distant take-profit bracket.
+It can also cut an early adverse move: if a fresh trade has been open for a few
+minutes, never gained enough to prove the setup, and is already moving against
+the bot, the monitor can cancel the symbol's working orders and sell before the
+wider stale-loser threshold is reached.
+Backtest Lab now treats zero closed trades as insufficient evidence rather than
+a passed setup.
+
+Each bot run is now treated as a trading session, not just a Python process. The
+runner emits session start and end events with account, position, open-order,
+clock, and risk-limit snapshots. If account equity drops beyond the configured
+session loss guard, the bot logs a session-risk halt and, by default, asks
+Alpaca paper to flatten before standing down.
+
 ## Environment
 
 Required:
@@ -78,6 +94,12 @@ mega-cap tech, semis, crypto proxies, banks, healthcare, energy, defense,
 indexes, and rates/commodity ETFs. The system also expands that base universe
 from current news and political/policy themes before each strategy scan.
 
+If the bot is started before the US market opens and the next open is inside the
+wait window, it now runs a non-ordering pre-open research pass. That pass builds
+a catalyst research queue, writes a briefing artifact, and then waits for the
+open. Live trade/quote/spread/volume checks still have to confirm the queue
+after the open before any Alpaca paper order can be submitted.
+
 Useful knobs:
 
 ```powershell
@@ -89,6 +111,7 @@ Useful knobs:
 ```
 
 Use `--disable-news-politics` to run only the explicit universe. Use
+`--disable-premarket-research` to skip the waiting-room research briefing. Use
 `--alpaca-stock-feed sip` only when your Alpaca plan supports it; otherwise keep
 `iex` or the value in `ALPACA_STOCK_FEED`.
 
@@ -104,19 +127,72 @@ Use `--disable-flatten-at-close` only when you explicitly want to test overnight
 carry behavior. Use `--no-flatten-on-max-cycles` only when a bounded test run
 should leave the paper account untouched after the final cycle.
 
+## Stop Cleanly
+
+Do not terminate the Python process if you want the bot to stand down cleanly.
+Ask it to stop through the watched control file instead:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\request_day_trader_stop.py
+```
+
+By default this writes
+`results/autonomous_day_trader/control/stop_requested.json` with action
+`flatten`. The running bot checks for that file between cycles and during the
+position monitor, logs the request, asks Alpaca paper to cancel working orders
+and close positions, removes the request file, and exits normally.
+
+To stop without flattening positions or cancelling open orders:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\request_day_trader_stop.py --action stop
+```
+
+Use `--stop-file` on both the bot and the stop-request script only when you want
+a non-default control path. If you write a stop request while no bot is running,
+delete the request file before the next launch or the next bot process will
+honor it immediately.
+
 Profit-protection knobs:
 
 ```powershell
 .\.venv\Scripts\python.exe run_day_trader_bot.py `
-  --profit-protection-min-gain-pct 0.75 `
-  --profit-protection-max-giveback-pct 0.60 `
-  --profit-protection-max-giveback-fraction 0.50 `
+  --profit-protection-min-gain-pct 0.50 `
+  --profit-protection-max-giveback-pct 0.45 `
+  --profit-protection-max-giveback-fraction 0.40 `
+  --momentum-decay-min-minutes 20 `
+  --momentum-decay-min-gain-pct 0.15 `
+  --momentum-decay-max-loss-pct 0.30 `
+  --early-adverse-min-minutes 5 `
+  --early-adverse-max-loss-pct 0.30 `
+  --early-adverse-max-high-gain-pct 0.15 `
+  --stale-loser-max-loss-pct 0.75 `
+  --stale-loser-cooldown-minutes 30 `
+  --max-session-loss-usd 750 `
+  --max-session-drawdown-pct 1.0 `
   --unprotected-position-grace-seconds 60
 ```
 
 Use `--disable-profit-protection` only when comparing static bracket exits.
+Use `--disable-stale-loser-exit` only when intentionally letting bracket orders
+manage losing positions without live intervention.
+Use `--disable-momentum-decay-exit` only when you want to let entries keep
+working even after they have failed to move enough within the configured time
+window.
+Use `--disable-early-adverse-exit` only when you want fresh trades to wait for
+the normal stale-loser or momentum-decay rules before the bot intervenes.
 Use `--disable-unprotected-position-exit` only when intentionally allowing
 manual or overnight leftovers to remain in the paper account.
+Use `--disable-session-risk-flatten` only when you want the bot to stop opening
+new work after a session-risk breach without automatically flattening through
+Alpaca paper.
+
+Stale-loser, early-adverse, and momentum-decay exits now create a same-symbol
+cooldown by default. If the monitor cuts a loser, a fresh trade that starts
+failing, or a trade that has stalled, future strategy cycles block fresh buys for
+that symbol until the cooldown expires. This is deliberately a "do nothing"
+rule: after a failed intraday idea, the bot has to wait before trying the same
+ticker again.
 
 ## Profiles
 
@@ -125,8 +201,9 @@ manual or overnight leftovers to remain in the paper account.
 - minimum `$2,000` target notional per new paper order
 - smaller order cap, currently up to about `$3,000` per new paper order
 - up to 20% paper-account deployment by default on a `$100k` account
+- maximum 4 active day-trade positions
 - higher confidence gate
-- tighter stops and tighter take-profit brackets
+- tighter stops and tighter take-profit brackets, with take-profit caps under 4%
 - blocks high volatility, wide spreads, stale trades, and weak backtests
 
 `risky` maximizes paper upside:
@@ -134,9 +211,9 @@ manual or overnight leftovers to remain in the paper account.
 - minimum `$2,000` target notional per new paper order
 - larger order cap, currently up to about `$5,000` per new paper order
 - up to 30% paper-account deployment by default on a `$100k` account
-- more target positions
+- maximum 5 active day-trade positions
 - lower confidence gate
-- wider stops and larger take-profit brackets
+- wider stops and larger take-profit brackets, with take-profit caps under 6%
 - allows more momentum-breakout behavior while still blocking stale/wide-spread
   data
 
@@ -160,6 +237,19 @@ News/policy catalysts only expand and annotate the scan. They do not by
 themselves authorize trades; price action, volume, spread, stale-data checks,
 strategy confidence, order-flow enrichment, account exposure, and risk caps
 still gate every paper order.
+
+The catalyst reader now separates pre-open research actions:
+
+- `priority_research`: clear catalyst score with no obvious news risk.
+- `confirm_at_open`: interesting headline/theme that needs live confirmation.
+- `risk_review`: catalyst exists, but legal, halt, dilution, buyout, downgrade,
+  or similar risk terms require extra caution.
+- `watch`: context only.
+
+When both safe and risky desks run in the same cycle, a symbol bought by the
+first desk is blocked from fresh buys by later desks in that cycle. This avoids
+double-building a position while Alpaca fill, bracket, and position state is
+still propagating.
 
 The broader research/training doctrine lives in
 `knowledge/day_trader_ai_research_program_2026.md`.

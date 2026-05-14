@@ -27,12 +27,22 @@ The day-trader system should behave like a small trading business:
 - Close all open intraday positions before the market close.
 - Protect intraday winners: after a position has moved in favor, monitor its
   high-watermark and sell when the giveback breaches the configured threshold.
+- Cut stale losers: do not wait for a distant take-profit if a day-trade
+  position is already down beyond the configured intraday loss threshold.
 - Do not leave unprotected remainders: fractional leftovers or positions without
   adequate open sell-order coverage should be exited in day-trading mode.
+- Cap simultaneous active positions; if the book is full, new ideas stay on the
+  watchlist until capital and attention are freed.
+- Do not let multiple strategy desks build the same symbol in the same cycle;
+  one fill should be reconciled before another desk adds to that ticker.
+- Treat zero-trade backtests as no evidence, not approval.
 - No autonomous trade without fresh price, clean spread, sufficient volume, and
   a named strategy.
 - News and politics can expand the watchlist, but cannot authorize a trade by
   themselves.
+- Pre-open research should create the day's interest list from catalysts,
+  liquidity, relative volume, volatility, and market/sector attention; the open
+  session must still confirm spreads, live volume, strategy, and risk gates.
 - Avoid direct spot forex assumptions in the current Alpaca equity workflow.
   Use currency ETFs as tradable proxies unless a dedicated FX broker/data stack
   is integrated.
@@ -120,6 +130,10 @@ Minimum live context per candidate:
 - Recent prints/order-flow features: volume profile, point of control, delta,
   large prints, and absorption flags.
 - News/politics catalyst tags and recent headlines.
+- Pre-open research action: `priority_research`, `confirm_at_open`,
+  `risk_review`, or `watch`.
+- Day-trade fit score: liquidity, relative volume, useful volatility,
+  meaningful move, and spread when available.
 - Account context: existing position, open orders, buying power, daytrade count,
   deployment, concentration, and time to close.
 
@@ -135,23 +149,25 @@ Preferred future data additions:
 
 ## Research Backlog
 
-1. Build a replayable intraday backtest harness using one-minute bars and
+1. Validate the new pre-open catalyst queue against daily outcomes: what was in
+   play at 09:30 ET, what actually moved, and what the bot ignored correctly.
+2. Build a replayable intraday backtest harness using one-minute bars and
    recorded quote/order-flow snapshots.
-2. Add walk-forward evaluation by market regime: trend day, range day, high-vol
+3. Add walk-forward evaluation by market regime: trend day, range day, high-vol
    open, Fed/news day, low-volume holiday session.
-3. Add pre-trade checklist scoring and post-trade labels.
-4. Add daily flatness reconciliation: positions, orders, fills, P/L attribution,
+4. Add pre-trade checklist scoring and post-trade labels.
+5. Add daily flatness reconciliation: positions, orders, fills, P/L attribution,
    and strategy expectancy.
-5. Add a strategy registry with promotion levels: research-only, paper-watch,
+6. Add a strategy registry with promotion levels: research-only, paper-watch,
    paper-trade, live-eligible.
-6. Add slippage and spread-cost modeling.
-7. Add kill switches: daily loss, consecutive losers, stale data, widened
+7. Add slippage and spread-cost modeling.
+8. Add kill switches: daily loss, consecutive losers, stale data, widened
    spreads, API errors, late-session risk, and PDT/account restrictions.
-8. Add currency/forex plan: decide whether to remain with ETF proxies or add a
+9. Add currency/forex plan: decide whether to remain with ETF proxies or add a
    dedicated FX broker/data provider.
-9. Add crypto plan: separate 24/7 risk model, no equity market-close assumption,
+10. Add crypto plan: separate 24/7 risk model, no equity market-close assumption,
    and no unsupported bracket-order assumptions.
-10. Add agent training evals: give each role historical cases and score whether
+11. Add agent training evals: give each role historical cases and score whether
     it produced a correct veto, entry, exit, or stand-down.
 
 ## Primary Source Anchors

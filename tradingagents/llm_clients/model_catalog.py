@@ -116,16 +116,19 @@ MODEL_OPTIONS: ProviderModeOptions = {
     },
     "ollama": {
         "quick": [
-            ("Qwen3:0.6B (smallest local, CPU/GPU friendly)", "qwen3:0.6b"),
-            ("Qwen3:latest (8B, local)", "qwen3:latest"),
-            ("GPT-OSS:latest (20B, local)", "gpt-oss:latest"),
-            ("GLM-4.7-Flash:latest (30B, local)", "glm-4.7-flash:latest"),
+            ("Qwen3:8B (recommended local quick model)", "qwen3:8b"),
+            ("Qwen3:latest (local quick fallback)", "qwen3:latest"),
+            ("Qwen3:4B (lighter local quick model)", "qwen3:4b"),
+            ("Qwen3:0.6B (smallest local fallback)", "qwen3:0.6b"),
+            ("Custom local Ollama model ID", "custom"),
         ],
         "deep": [
-            ("Qwen3:0.6B (smallest local, CPU/GPU friendly)", "qwen3:0.6b"),
-            ("GLM-4.7-Flash:latest (30B, local)", "glm-4.7-flash:latest"),
-            ("GPT-OSS:latest (20B, local)", "gpt-oss:latest"),
-            ("Qwen3:latest (8B, local)", "qwen3:latest"),
+            ("GPT-OSS:20B (recommended local deep model)", "gpt-oss:20b"),
+            ("GPT-OSS:latest (local deep fallback)", "gpt-oss:latest"),
+            ("Qwen3:14B (strong local reasoning)", "qwen3:14b"),
+            ("Qwen3:8B (balanced local reasoning)", "qwen3:8b"),
+            ("Qwen3:0.6B (smallest local fallback)", "qwen3:0.6b"),
+            ("Custom local Ollama model ID", "custom"),
         ],
     },
 }

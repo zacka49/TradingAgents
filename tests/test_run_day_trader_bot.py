@@ -29,7 +29,24 @@ def test_vs_code_launcher_defaults_run_full_bot_until_close():
     assert settings.flatten_minutes_before_close == 5
     assert settings.stop_new_entries_minutes_before_close == 15
     assert settings.protect_intraday_profits is True
+    assert settings.profit_protection_min_gain_pct == 0.50
+    assert settings.profit_protection_max_giveback_pct == 0.45
+    assert settings.profit_protection_max_giveback_fraction == 0.40
+    assert settings.exit_momentum_decay is True
+    assert settings.momentum_decay_min_minutes == 20
+    assert settings.momentum_decay_min_gain_pct == 0.15
+    assert settings.momentum_decay_max_loss_pct == 0.30
+    assert settings.exit_early_adverse_moves is True
+    assert settings.early_adverse_min_minutes == 5
+    assert settings.early_adverse_max_loss_pct == 0.30
+    assert settings.early_adverse_max_high_gain_pct == 0.15
     assert settings.exit_unprotected_positions is True
+    assert settings.stale_loser_cooldown_minutes == 30
+    assert settings.max_session_loss_usd == 750.0
+    assert settings.max_session_drawdown_pct == 1.0
+    assert settings.flatten_on_session_risk_halt is True
+    assert settings.premarket_research_enabled is True
+    assert settings.stop_file is None
     assert "QQQ" in settings.universe
     assert "SPY" in settings.universe
     assert "UUP" in settings.universe
@@ -105,4 +122,61 @@ def test_vs_code_launcher_terminal_message_mentions_profit_exit():
         }
     )
 
-    assert "Profit protection submitted exits: NVDA (profit_giveback)" in message
+    assert "Risk monitor submitted exits: NVDA (profit_giveback)" in message
+
+
+def test_vs_code_launcher_terminal_message_mentions_manual_stop():
+    launcher = _load_launcher_module()
+    message = launcher.terminal_message(
+        {
+            "event": "manual_stop_request_completed",
+            "action": "flatten",
+            "reason": "end session",
+        }
+    )
+
+    assert "Manual stop completed" in message
+    assert "flatten" in message
+
+
+def test_vs_code_launcher_terminal_message_mentions_session_lifecycle():
+    launcher = _load_launcher_module()
+    start = launcher.terminal_message(
+        {
+            "event": "autonomous_ceo_session_start",
+            "session_id": "daytrader_20260506T133000Z",
+            "initial_equity": 100000,
+            "positions_count": 2,
+            "open_orders_count": 3,
+        }
+    )
+    end = launcher.terminal_message(
+        {
+            "event": "autonomous_ceo_session_end",
+            "session_id": "daytrader_20260506T133000Z",
+            "cycles_completed": 7,
+            "final_equity": 100050,
+            "session_risk": {"loss_usd": 0, "drawdown_pct": 0},
+        }
+    )
+
+    assert "Trading session daytrader_20260506T133000Z started" in start
+    assert "Initial equity: $100000.00" in start
+    assert "ended after 7 cycle" in end
+    assert "Final equity: $100050.00" in end
+
+
+def test_vs_code_launcher_terminal_message_mentions_session_risk_halt():
+    launcher = _load_launcher_module()
+    message = launcher.terminal_message(
+        {
+            "event": "autonomous_ceo_session_risk_halt",
+            "breach_reasons": ["max_session_loss_usd"],
+            "loss_usd": 760,
+            "drawdown_pct": 0.76,
+        }
+    )
+
+    assert "Session risk halt triggered" in message
+    assert "max_session_loss_usd" in message
+    assert "$760.00" in message

@@ -38,6 +38,12 @@ pip-delete-this-directory.txt
 
 # Local run artifacts
 results/
+!results/
+results/*
+!results/autonomous_day_trader/
+results/autonomous_day_trader/*
+!results/autonomous_day_trader/day_summaries/
+!results/autonomous_day_trader/day_summaries/*.md
 
 # Unit test / coverage reports
 htmlcov/

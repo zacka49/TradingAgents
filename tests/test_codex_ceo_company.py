@@ -317,7 +317,9 @@ def test_safe_and_risky_profiles_apply_distinct_risk_caps():
     assert safe["ceo_approval_required"] is False
     assert risky["ceo_approval_required"] is False
     assert "opening_range_breakout_15m" in safe["day_trade_auto_strategies"]
+    assert "momentum_breakout" in safe["day_trade_auto_strategies"]
     assert "opening_range_breakout_15m" in risky["day_trade_auto_strategies"]
+    assert safe["codex_ceo_day_trade_min_fit_score"] > risky["codex_ceo_day_trade_min_fit_score"]
     assert safe["portfolio_min_order_notional_usd"] == 2000.0
     assert risky["portfolio_min_order_notional_usd"] == 2000.0
     assert safe["max_order_notional_usd"] == 3000.0
@@ -327,6 +329,183 @@ def test_safe_and_risky_profiles_apply_distinct_risk_caps():
     assert safe["max_order_notional_usd"] < risky["max_order_notional_usd"]
     assert safe["day_trade_min_strategy_confidence"] > risky["day_trade_min_strategy_confidence"]
     assert safe["day_trade_max_stop_loss_pct"] < risky["day_trade_max_stop_loss_pct"]
+    assert safe["day_trade_max_take_profit_pct"] < 0.04
+    assert risky["day_trade_max_take_profit_pct"] < 0.06
+    assert safe["portfolio_max_active_positions"] == 4
+    assert risky["portfolio_max_active_positions"] == 5
+
+
+def test_order_planning_skips_new_buys_when_active_position_cap_is_full():
+    broker = FakeLargePaperBroker()
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_max_active_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_max_deploy_usd": 100000,
+            "portfolio_min_order_notional_usd": 100,
+            "max_order_notional_usd": 5000,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=broker,
+    )
+    candidates = [_candidate("AAA", 50, 10)]
+
+    plans = runner.build_order_plans(
+        candidates=candidates,
+        target_weights=runner.build_target_weights(candidates),
+        account=broker.get_account(),
+        positions=[
+            {
+                "symbol": "BBB",
+                "qty": "20",
+                "market_value": "1000",
+                "current_price": "50",
+            }
+        ],
+    )
+
+    assert plans == []
+    assert runner._last_order_plan_diagnostics[0]["reason"] == "max_active_positions_reached"
+
+
+def test_target_weights_require_day_trade_fit_when_available():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "codex_ceo_day_trade_min_fit_score": 4.0,
+        },
+        broker=FakeBroker(),
+    )
+    candidate = _candidate("AAA", 50, 10)
+    candidate.day_trade_fit_score = 2.0
+    candidate.day_trade_fit_reasons = ["baseline_liquidity"]
+
+    assert runner.build_target_weights([candidate]) == {}
+
+    candidate.day_trade_fit_score = 4.5
+    assert runner.build_target_weights([candidate]) == {"AAA": 0.25}
+
+
+def test_order_planning_blocks_same_cycle_profile_buy_symbol():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_max_deploy_usd": 1000,
+            "portfolio_min_order_notional_usd": 10,
+            "max_order_notional_usd": 250,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "day_trade_block_new_buys_symbols": ["AAA"],
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=FakeBroker(),
+    )
+    candidates = [_candidate("AAA", 50, 10)]
+
+    plans = runner.build_order_plans(
+        candidates=candidates,
+        target_weights=runner.build_target_weights(candidates),
+        account=runner.broker.get_account(),
+        positions=[],
+    )
+
+    assert plans == []
+    assert runner._last_order_plan_diagnostics[0]["reason"] == "blocked_by_same_cycle_profile_buy"
+
+
+def test_order_planning_adds_stale_loser_trim_plan_without_open_sell_order():
+    broker = FakeLargePaperBroker()
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_max_deploy_usd": 100000,
+            "portfolio_min_order_notional_usd": 100,
+            "max_order_notional_usd": 5000,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "day_trade_trim_stale_losers": True,
+            "day_trade_stale_loss_pct": 0.75,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=broker,
+    )
+
+    plans = runner.build_order_plans(
+        candidates=[],
+        target_weights={},
+        account=broker.get_account(),
+        positions=[
+            {
+                "symbol": "LOSER",
+                "qty": "10",
+                "market_value": "990",
+                "current_price": "99",
+                "unrealized_pl": "-10",
+                "unrealized_plpc": "-0.01",
+            }
+        ],
+    )
+
+    assert len(plans) == 1
+    assert plans[0].ticker == "LOSER"
+    assert plans[0].side == "sell"
+    assert "stale day-trade loser" in plans[0].reason
+
+
+def test_order_planning_floors_fractional_sell_quantity_to_available_shares():
+    broker = FakeLargePaperBroker()
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.0,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_max_deploy_usd": 100000,
+            "portfolio_min_order_notional_usd": 100,
+            "max_order_notional_usd": 5000,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "day_trade_trim_stale_losers": True,
+            "day_trade_stale_loss_pct": 0.75,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=broker,
+    )
+
+    plans = runner.build_order_plans(
+        candidates=[],
+        target_weights={},
+        account=broker.get_account(),
+        positions=[
+            {
+                "symbol": "NVDA",
+                "qty": "10.000053132",
+                "market_value": "2200",
+                "current_price": "220",
+                "unrealized_pl": "-20",
+                "unrealized_plpc": "-0.01",
+            }
+        ],
+    )
+
+    assert plans[0].ticker == "NVDA"
+    assert plans[0].side == "sell"
+    assert plans[0].quantity == 10.0
 
 
 def test_profiles_size_trades_above_two_thousand_for_large_paper_account():

@@ -10,6 +10,9 @@ config = DEFAULT_CONFIG.copy()
 # Local LLM provider via Ollama OpenAI-compatible API.
 config["llm_provider"] = "ollama"
 config["backend_url"] = "http://localhost:11434/v1"
+config["ollama_base_url"] = "http://localhost:11434"
+config["llm_budget_mode"] = "local_only"
+config["allow_online_llm"] = False
 
 # Start with the same model for both roles; upgrade deep model later.
 config["quick_think_llm"] = "qwen3:0.6b"
