@@ -70,6 +70,19 @@ Use when price is overextended or news-driven. Fading can work, but it is a
 specialist setup because momentum can continue longer than expected. Do not
 auto-trade without current catalyst review.
 
+### News Reversion Desk
+
+Use when a dated headline causes a close-to-close shock and the research
+question is whether price tends to move back toward the pre-news close on the
+next trading day. This is a department-level research function, not an
+autonomous execution strategy.
+
+The event study records previous close, event-session close, next-session
+close, event move, one-day fade return, and reversion capture. Headlines
+published after the US cash close are assigned to the next available trading
+session. Treat positive results as paper-research evidence only until live
+spread, liquidity, volume, stop, and catalyst-risk gates confirm the setup.
+
 ### Scalping
 
 Scalping requires real-time spreads, fast execution, level 2/order-flow data,
@@ -81,6 +94,10 @@ delayed/free data.
 - Paper account only.
 - Enforce market open for autonomous submission.
 - Cap deployed capital and order notional.
+- Split simultaneous trading by desk and asset class, but keep one central
+  portfolio allocator and one execution controller.
+- Trade only strategies promoted by the Strategy Research Department to
+  `paper_trade_candidate` or `approved_paper_strategy`.
 - Cap active day-trading positions.
 - Prefer liquid names with average volume above 1 million shares.
 - Prefer stocks/ETFs with tight spreads, useful volatility, unusual relative
@@ -92,6 +109,10 @@ delayed/free data.
 - Cut stale losers and protect winners by high-watermark giveback rules.
 - Record all blocked or failed orders in artifacts.
 - Review PDT/margin implications before copying behavior to any live account.
+- Keep forex research-only until a dedicated broker/data/execution adapter and
+  currency-specific risk policy exist.
+- Keep crypto separate from equity market-hour logic because crypto is a 24/7
+  market with different fees, liquidity, and monitoring needs.
 
 ## Catalyst And Thesis Discipline
 
@@ -140,6 +161,18 @@ submit Alpaca paper orders.
 The strategy classifier lives in:
 
 `tradingagents/company/day_trading_strategy.py`
+
+The Strategy Research Department lives in:
+
+`tradingagents/company/strategy_research_department.py`
+
+The News Reversion Desk lives in:
+
+`tradingagents/company/news_reversion_desk.py`
+
+The multi-desk business governance model lives in:
+
+`tradingagents/company/business_governance.py`
 
 The autonomous paper runner lives in:
 

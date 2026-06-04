@@ -33,6 +33,7 @@ def test_local_only_blocks_online_provider_and_chooses_installed_local_models():
         "tradingagents.llm_clients.compute_policy.requests.get",
         return_value=_ollama_tags(
             "qwen3:0.6b",
+            "qwen3:4b-instruct",
             "qwen3:4b",
             "gpt-oss:20b",
             "kimi-k2.6:cloud",
@@ -43,8 +44,8 @@ def test_local_only_blocks_online_provider_and_chooses_installed_local_models():
     assert guarded["llm_provider"] == "ollama"
     assert guarded["backend_url"] == "http://localhost:11434/v1"
     assert guarded["ollama_base_url"] == "http://localhost:11434"
-    assert guarded["quick_think_llm"] == "qwen3:4b"
-    assert guarded["deep_think_llm"] == "gpt-oss:20b"
+    assert guarded["quick_think_llm"] == "qwen3:4b-instruct"
+    assert guarded["deep_think_llm"] == "qwen3:4b-instruct"
     assert guarded["compute_policy_report"]["action"] == "local_only_guard_applied"
     assert "kimi-k2.6:cloud" not in guarded["compute_policy_report"]["installed_local_models"]
 
@@ -136,3 +137,32 @@ def test_cloud_ollama_staff_model_replaced_by_local_model():
 
     assert guarded["ollama_staff_model"] == "qwen3:0.6b"
     assert is_cloud_ollama_model("kimi-k2.6:cloud")
+
+
+@pytest.mark.unit
+def test_role_model_overrides_are_replaced_when_missing_or_cloud():
+    config = {
+        "llm_provider": "ollama",
+        "backend_url": "http://localhost:11434/v1",
+        "ollama_base_url": "http://localhost:11434",
+        "quick_think_llm": "qwen3:4b-instruct",
+        "deep_think_llm": "qwen3:4b-instruct",
+        "role_model_overrides": {
+            "current_news_scout": "llama3.2:3b",
+            "risk_office_guardian": "kimi-k2.6:cloud",
+            "portfolio_manager": "missing-local-model",
+        },
+        "llm_budget_mode": "local_only",
+        "allow_online_llm": False,
+        "ollama_model_probe_timeout_seconds": 0.1,
+    }
+
+    with patch(
+        "tradingagents.llm_clients.compute_policy.requests.get",
+        return_value=_ollama_tags("qwen3:4b-instruct", "llama3.2:3b"),
+    ):
+        guarded = apply_compute_policy(config)
+
+    assert guarded["role_model_overrides"]["current_news_scout"] == "llama3.2:3b"
+    assert guarded["role_model_overrides"]["risk_office_guardian"] == "qwen3:4b-instruct"
+    assert guarded["role_model_overrides"]["portfolio_manager"] == "qwen3:4b-instruct"

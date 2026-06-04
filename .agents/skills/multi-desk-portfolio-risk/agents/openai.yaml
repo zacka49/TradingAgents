@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multi-Desk Portfolio Risk"
+  short_description: "Allocate risk across simultaneous trading desks."
+  default_prompt: "Use this skill to manage multi-desk capital caps, correlated exposure, simultaneous trades, and central portfolio risk controls."

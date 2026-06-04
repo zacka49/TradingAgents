@@ -45,11 +45,19 @@ def test_vs_code_launcher_defaults_run_full_bot_until_close():
     assert settings.max_session_loss_usd == 750.0
     assert settings.max_session_drawdown_pct == 1.0
     assert settings.flatten_on_session_risk_halt is True
+    assert settings.startup_flat_required is True
+    assert settings.allow_carry_risk is False
+    assert settings.flatten_existing_at_start is False
+    assert settings.entry_cooldown_minutes == 20
     assert settings.premarket_research_enabled is True
     assert settings.stop_file is None
     assert "QQQ" in settings.universe
     assert "SPY" in settings.universe
     assert "UUP" in settings.universe
+    assert "MSTR" in settings.universe
+    assert "GBTC" in settings.universe
+    assert "ETHA" in settings.universe
+    assert "BTC-USD" not in settings.universe
     assert settings.results_dir == str(
         launcher.REPO_ROOT / launcher.DEFAULT_RESULTS_DIR
     )
@@ -66,6 +74,23 @@ def test_vs_code_launcher_once_mode_only_runs_one_cycle():
     assert settings.universe == ["SPY", "QQQ"]
     assert settings.run_until_close is False
     assert settings.once is True
+
+
+def test_vs_code_launcher_exposes_startup_safety_overrides():
+    launcher = _load_launcher_module()
+    args = launcher.build_parser().parse_args(
+        [
+            "--allow-carry-risk",
+            "--flatten-existing-at-start",
+            "--entry-cooldown-minutes",
+            "35",
+        ]
+    )
+    settings = launcher.settings_from_args(args)
+
+    assert settings.allow_carry_risk is True
+    assert settings.flatten_existing_at_start is True
+    assert settings.entry_cooldown_minutes == 35
 
 
 def test_vs_code_launcher_terminal_messages_are_plain_english():

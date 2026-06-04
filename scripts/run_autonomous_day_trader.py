@@ -64,6 +64,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-session-loss-usd", type=float, default=750.0)
     parser.add_argument("--max-session-drawdown-pct", type=float, default=1.0)
     parser.add_argument("--disable-session-risk-flatten", action="store_true")
+    parser.add_argument(
+        "--allow-carry-risk",
+        action="store_true",
+        help=(
+            "Allow the bot to start even when Alpaca paper already has open "
+            "positions or open orders."
+        ),
+    )
+    parser.add_argument(
+        "--flatten-existing-at-start",
+        action="store_true",
+        help=(
+            "If the account is not flat at startup, request a paper-account "
+            "flatten before running new strategy cycles."
+        ),
+    )
+    parser.add_argument("--entry-cooldown-minutes", type=int, default=20)
     parser.add_argument("--disable-news-politics", action="store_true")
     parser.add_argument("--disable-premarket-research", action="store_true")
     parser.add_argument("--news-max-symbols", type=int, default=None)
@@ -123,6 +140,9 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         max_session_loss_usd=args.max_session_loss_usd,
         max_session_drawdown_pct=args.max_session_drawdown_pct,
         flatten_on_session_risk_halt=not bool(args.disable_session_risk_flatten),
+        allow_carry_risk=bool(args.allow_carry_risk),
+        flatten_existing_at_start=bool(args.flatten_existing_at_start),
+        entry_cooldown_minutes=args.entry_cooldown_minutes,
     )
 
 

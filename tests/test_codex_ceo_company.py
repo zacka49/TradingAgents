@@ -395,6 +395,34 @@ def test_target_weights_require_day_trade_fit_when_available():
     assert runner.build_target_weights([candidate]) == {"AAA": 0.25}
 
 
+def test_target_weights_require_strategy_research_promotion():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 1,
+            "portfolio_deploy_pct": 0.25,
+            "portfolio_max_position_weight": 0.25,
+            "day_trade_auto_strategies": ["vwap_reclaim", "momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+            "strategy_research_enabled": True,
+            "strategy_research_gate_targets": True,
+        },
+        broker=FakeBroker(),
+    )
+    blocked = _candidate("AAA", 50, 10)
+    blocked.strategy = "vwap_reclaim"
+    blocked.strategy_confidence = 0.8
+    allowed = _candidate("BBB", 25, 9)
+    allowed.strategy = "momentum_breakout"
+
+    weights = runner.build_target_weights([blocked, allowed])
+
+    assert weights == {"BBB": 0.25}
+    assert blocked.auto_trade_allowed is False
+    assert "strategy_not_promoted" in blocked.risk_flags
+    assert blocked.strategy_promotion_status in {"research_idea", "retired"}
+    assert allowed.strategy_promotion_status == "approved_paper_strategy"
+
+
 def test_order_planning_blocks_same_cycle_profile_buy_symbol():
     runner = CodexCEOCompanyRunner(
         {

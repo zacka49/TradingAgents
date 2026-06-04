@@ -76,6 +76,13 @@ class FakeCEOBroker:
         }
 
 
+def flat_broker():
+    broker = FakeCEOBroker()
+    broker.positions_payload = []
+    broker.orders_payload = []
+    return broker
+
+
 class FakeRunner:
     calls = []
 
@@ -127,8 +134,9 @@ def test_autonomous_ceo_runs_both_profiles_without_manual_supervision():
             profiles=("safe", "risky"),
             universe=("AAA", "BBB"),
             once=True,
+            final_session_report_enabled=False,
         ),
-        broker=FakeCEOBroker(),
+        broker=flat_broker(),
         runner_factory=lambda config, broker: FakeRunner(config, broker),
         now_fn=lambda: datetime(2026, 5, 6, 13, 30, tzinfo=UTC),
     )
@@ -193,8 +201,9 @@ def test_autonomous_ceo_blocks_same_symbol_buys_across_profiles_in_one_cycle():
             profiles=("safe", "risky"),
             universe=("AAA",),
             once=True,
+            final_session_report_enabled=False,
         ),
-        broker=FakeCEOBroker(),
+        broker=flat_broker(),
         runner_factory=lambda config, broker: SameSymbolBuyRunner(config, broker),
         now_fn=lambda: datetime(2026, 5, 6, 13, 30, tzinfo=UTC),
     )
@@ -234,6 +243,7 @@ def test_autonomous_ceo_stops_before_cycle_when_stop_requested(tmp_path):
         AutonomousCEOSettings(
             once=True,
             stop_file=str(stop_file),
+            final_session_report_enabled=False,
         ),
         broker=FakeCEOBroker(),
         runner_factory=lambda config, broker: FakeRunner(config, broker),
@@ -266,6 +276,7 @@ def test_autonomous_ceo_flattens_when_stop_request_asks_for_flatten(tmp_path):
         AutonomousCEOSettings(
             once=True,
             stop_file=str(stop_file),
+            final_session_report_enabled=False,
         ),
         broker=broker,
         runner_factory=lambda config, broker: FakeRunner(config, broker),
@@ -288,6 +299,113 @@ def test_autonomous_ceo_flattens_when_stop_request_asks_for_flatten(tmp_path):
     ]
     assert events[1]["action"] == "flatten"
     assert not stop_file.exists()
+
+
+def test_autonomous_ceo_blocks_non_flat_start_by_default():
+    FakeRunner.calls = []
+    broker = FakeCEOBroker()
+    events = []
+    agent = AutonomousPaperCEOAgent(
+        AutonomousCEOSettings(
+            once=True,
+            final_session_report_enabled=False,
+        ),
+        broker=broker,
+        runner_factory=lambda config, broker: FakeRunner(config, broker),
+        now_fn=lambda: datetime(2026, 5, 6, 13, 30, tzinfo=UTC),
+    )
+
+    assert agent.run(events.append) == 0
+
+    assert [event["event"] for event in events] == [
+        "autonomous_ceo_session_start",
+        "autonomous_ceo_startup_flat_gate_blocked",
+        "autonomous_ceo_session_end",
+    ]
+    assert events[1]["reason"] == "account_not_flat_at_start"
+    assert events[1]["positions_count"] == 1
+    assert events[1]["open_orders_count"] == 1
+    assert FakeRunner.calls == []
+
+
+def test_autonomous_ceo_writes_final_session_report(tmp_path):
+    events = []
+    agent = AutonomousPaperCEOAgent(
+        AutonomousCEOSettings(
+            once=True,
+            results_dir=str(tmp_path),
+        ),
+        broker=flat_broker(),
+        runner_factory=lambda config, broker: FakeRunner(config, broker),
+        now_fn=lambda: datetime(2026, 5, 6, 13, 30, tzinfo=UTC),
+    )
+
+    assert agent.run(events.append) == 0
+
+    final_report = events[-1]["final_report"]
+    assert final_report["written"] is True
+    assert final_report["flat"] is True
+    json_path = tmp_path / "session_reports" / "daytrader_20260506T133000Z_final.json"
+    markdown_path = tmp_path / "session_reports" / "daytrader_20260506T133000Z_final.md"
+    assert final_report["json_path"] == str(json_path)
+    assert final_report["markdown_path"] == str(markdown_path)
+    assert json_path.exists()
+    assert markdown_path.exists()
+    assert "Flat for next session | yes" in markdown_path.read_text(encoding="utf-8")
+
+
+def test_autonomous_ceo_recent_entry_cooldown_blocks_next_cycle_buy():
+    class RebuyRunner(FakeRunner):
+        calls = []
+
+        def __init__(self, config, broker):
+            self.config = config
+            self.broker = broker
+            RebuyRunner.calls.append(config)
+
+        def run(self, *, trade_date, universe, submit, ceo_approved):
+            blocked = bool(self.config.get("day_trade_block_new_buys_symbols"))
+            order = PortfolioOrderPlan(
+                ticker="AAA",
+                side="buy",
+                quantity=1,
+                latest_price=100,
+                estimated_notional_usd=100,
+                reason="test",
+                submitted=not blocked,
+                blocked_reason="blocked" if blocked else None,
+            )
+            return SimpleNamespace(
+                market_open=True,
+                artifact_dir="results/test",
+                candidates=[],
+                target_weights={"AAA": 0.1},
+                order_plans=[order],
+                submitted_orders=0 if blocked else 1,
+                blocked_orders=1 if blocked else 0,
+            )
+
+    RebuyRunner.calls = []
+    agent = AutonomousPaperCEOAgent(
+        AutonomousCEOSettings(
+            profiles=("safe",),
+            once=True,
+            entry_cooldown_minutes=20,
+        ),
+        broker=flat_broker(),
+        runner_factory=lambda config, broker: RebuyRunner(config, broker),
+        now_fn=lambda: datetime(2026, 5, 6, 13, 30, tzinfo=UTC),
+    )
+
+    agent.run_cycle(1)
+    cycle_two = agent.run_cycle(2)
+
+    assert RebuyRunner.calls[0].get("day_trade_block_new_buys_symbols") is None
+    assert RebuyRunner.calls[1]["day_trade_block_new_buys_symbols"] == ["AAA"]
+    assert RebuyRunner.calls[1]["day_trade_block_new_buys_reason_by_symbol"] == {
+        "AAA": "blocked_by_recent_entry_cooldown"
+    }
+    assert cycle_two["profiles"][0]["blocked_orders"] == 1
 
 
 def test_autonomous_ceo_profit_protection_exits_giveback():
@@ -606,6 +724,8 @@ def test_autonomous_ceo_session_risk_halt_flattens_before_cycle():
             once=True,
             max_session_loss_usd=50,
             max_session_drawdown_pct=15,
+            startup_flat_required=False,
+            final_session_report_enabled=False,
         ),
         broker=broker,
         runner_factory=lambda config, broker: FakeRunner(config, broker),
@@ -671,6 +791,8 @@ def test_autonomous_ceo_flattens_in_pre_close_window():
             run_until_close=True,
             flatten_at_close=True,
             flatten_minutes_before_close=5,
+            startup_flat_required=False,
+            final_session_report_enabled=False,
         ),
         broker=broker,
         runner_factory=lambda config, broker: FakeRunner(config, broker),

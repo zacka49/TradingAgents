@@ -20,6 +20,7 @@ class GraphSetup:
         tool_nodes: Dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
         config: Dict[str, Any] | None = None,
+        role_llms: Dict[str, Any] | None = None,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
@@ -27,6 +28,10 @@ class GraphSetup:
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
         self.config = config or {}
+        self.role_llms = role_llms or {}
+
+    def _role_llm(self, role: str, default_llm: Any) -> Any:
+        return self.role_llms.get(role, default_llm)
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -52,40 +57,40 @@ class GraphSetup:
 
         if opportunity_scout_enabled:
             opportunity_scout_node = create_opportunity_scout(
-                self.quick_thinking_llm
+                self._role_llm("opportunity_scout", self.quick_thinking_llm)
             )
             opportunity_scout_delete_node = create_msg_delete()
 
         if stock_discovery_enabled:
             stock_discovery_node = create_stock_discovery_researcher(
-                self.quick_thinking_llm
+                self._role_llm("stock_discovery", self.quick_thinking_llm)
             )
             stock_discovery_delete_node = create_msg_delete()
 
         if "market" in selected_analysts:
             analyst_nodes["market"] = create_market_analyst(
-                self.quick_thinking_llm
+                self._role_llm("market_analyst", self.quick_thinking_llm)
             )
             delete_nodes["market"] = create_msg_delete()
             tool_nodes["market"] = self.tool_nodes["market"]
 
         if "social" in selected_analysts:
             analyst_nodes["social"] = create_social_media_analyst(
-                self.quick_thinking_llm
+                self._role_llm("social_media_analyst", self.quick_thinking_llm)
             )
             delete_nodes["social"] = create_msg_delete()
             tool_nodes["social"] = self.tool_nodes["social"]
 
         if "news" in selected_analysts:
             analyst_nodes["news"] = create_news_analyst(
-                self.quick_thinking_llm
+                self._role_llm("news_analyst", self.quick_thinking_llm)
             )
             delete_nodes["news"] = create_msg_delete()
             tool_nodes["news"] = self.tool_nodes["news"]
 
         if "fundamentals" in selected_analysts:
             analyst_nodes["fundamentals"] = create_fundamentals_analyst(
-                self.quick_thinking_llm
+                self._role_llm("fundamentals_analyst", self.quick_thinking_llm)
             )
             delete_nodes["fundamentals"] = create_msg_delete()
             tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
@@ -95,20 +100,20 @@ class GraphSetup:
         github_research_enabled = self.config.get("github_research_enabled", True)
         if research_department_enabled:
             current_news_scout_node = create_current_news_scout(
-                self.quick_thinking_llm
+                self._role_llm("current_news_scout", self.quick_thinking_llm)
             )
             strategy_researcher_node = create_strategy_researcher(
-                self.quick_thinking_llm
+                self._role_llm("strategy_researcher", self.quick_thinking_llm)
             )
             copy_trading_researcher_node = create_copy_trading_researcher(
-                self.quick_thinking_llm
+                self._role_llm("copy_trading_researcher", self.quick_thinking_llm)
             )
             if github_research_enabled:
                 github_researcher_node = create_github_researcher(
-                    self.quick_thinking_llm
+                    self._role_llm("github_researcher", self.quick_thinking_llm)
                 )
             research_director_node = create_research_director(
-                self.deep_thinking_llm
+                self._role_llm("research_director", self.deep_thinking_llm)
             )
             research_department_delete_nodes = {
                 "current_news": create_msg_delete(),
@@ -117,10 +122,16 @@ class GraphSetup:
                 "github_research": create_msg_delete(),
             }
 
-        bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
-        bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
-        research_manager_node = create_research_manager(self.deep_thinking_llm)
-        trader_node = create_trader(self.quick_thinking_llm)
+        bull_researcher_node = create_bull_researcher(
+            self._role_llm("bull_researcher", self.quick_thinking_llm)
+        )
+        bear_researcher_node = create_bear_researcher(
+            self._role_llm("bear_researcher", self.quick_thinking_llm)
+        )
+        research_manager_node = create_research_manager(
+            self._role_llm("research_manager", self.deep_thinking_llm)
+        )
+        trader_node = create_trader(self._role_llm("trader", self.quick_thinking_llm))
 
         business_departments_enabled = self.config.get("business_departments_enabled", True)
         training_development_enabled = (
@@ -129,33 +140,41 @@ class GraphSetup:
         )
         if business_departments_enabled:
             chief_investment_officer_node = create_chief_investment_officer(
-                self.deep_thinking_llm
+                self._role_llm("chief_investment_officer", self.deep_thinking_llm)
             )
             trading_desk_node = create_trading_desk_strategist(
-                self.quick_thinking_llm
+                self._role_llm("trading_desk_strategist", self.quick_thinking_llm)
             )
             risk_office_node = create_risk_office_guardian(
-                self.quick_thinking_llm
+                self._role_llm("risk_office_guardian", self.deep_thinking_llm)
             )
             portfolio_office_node = create_portfolio_office_allocator(
-                self.quick_thinking_llm
+                self._role_llm("portfolio_office_allocator", self.quick_thinking_llm)
             )
             operations_compliance_node = create_operations_compliance_auditor(
-                self.quick_thinking_llm
+                self._role_llm("operations_compliance_auditor", self.quick_thinking_llm)
             )
             evaluation_node = create_evaluation_analyst(
-                self.quick_thinking_llm
+                self._role_llm("evaluation_analyst", self.deep_thinking_llm)
             )
             if training_development_enabled:
                 training_development_node = create_training_development_coach(
-                    self.quick_thinking_llm
+                    self._role_llm("training_development_coach", self.deep_thinking_llm)
                 )
 
         # Create risk analysis nodes
-        aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
-        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
-        conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
-        portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
+        aggressive_analyst = create_aggressive_debator(
+            self._role_llm("aggressive_debator", self.quick_thinking_llm)
+        )
+        neutral_analyst = create_neutral_debator(
+            self._role_llm("neutral_debator", self.deep_thinking_llm)
+        )
+        conservative_analyst = create_conservative_debator(
+            self._role_llm("conservative_debator", self.deep_thinking_llm)
+        )
+        portfolio_manager_node = create_portfolio_manager(
+            self._role_llm("portfolio_manager", self.deep_thinking_llm)
+        )
 
         # Create workflow
         workflow = StateGraph(AgentState)

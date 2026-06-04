@@ -14,9 +14,17 @@ config["ollama_base_url"] = "http://localhost:11434"
 config["llm_budget_mode"] = "local_only"
 config["allow_online_llm"] = False
 
-# Start with the same model for both roles; upgrade deep model later.
-config["quick_think_llm"] = "qwen3:0.6b"
-config["deep_think_llm"] = "qwen3:0.6b"
+# Good local defaults for modest hardware. `qwen3:4b-instruct` is the main
+# instruction-following worker; `llama3.2:3b` is a faster summarizer; Phi is
+# useful for risk/evaluation-style review.
+config["quick_think_llm"] = "qwen3:4b-instruct"
+config["deep_think_llm"] = "qwen3:4b-instruct"
+config["ollama_staff_model"] = "qwen3:4b-instruct"
+
+config["role_model_overrides"] = {
+    "current_news_scout": "llama3.2:3b",
+    "github_researcher": "llama3.2:3b",
+}
 
 # Keep costs low while validating setup.
 config["max_debate_rounds"] = 1

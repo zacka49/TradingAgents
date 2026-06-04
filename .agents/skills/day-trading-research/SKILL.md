@@ -49,3 +49,6 @@ description: Research and operationalize day-trading, volatility, momentum, brea
 - `docs/day_trader_managed_agent_cookbook.md`: TradingAgents operating cookbook adapted from the Claude financial-services managed-agent pattern.
 - `knowledge/claude_financial_services_repo_analysis_2026.md`: comparison report, SWOT analysis, and imported lessons.
 - `knowledge/day_trading_stock_selection_and_premarket_research_2026.md`: durable stock-selection and pre-open catalyst research doctrine.
+- `tradingagents/company/agent_skill_registry.py`: role-by-role skill assignments, training drills, and success metrics.
+- `tradingagents/company/strategy_research_department.py`: quant strategy research, promotion, demotion, and strategy-library handoff.
+- `docs/agent_skill_training_matrix.md`: rendered training matrix for every current AI role.

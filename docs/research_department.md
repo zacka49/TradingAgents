@@ -16,6 +16,14 @@ The rest of the business is also expanded into downstream AI departments: Invest
 | Research Director | Synthesizes the specialist memos into a CEO-ready brief. | Highest-value signals, conflicts, limitations, and debate questions for bull/bear researchers. |
 | Training and Development Coach | Runs after Evaluation and upskills every active AI role based on the run outputs. | Role-specific lessons, drills, data/tool skills, improvement rubric, and next-run coaching instructions. |
 
+The durable agent skill matrix lives in
+`tradingagents/company/agent_skill_registry.py` and can be rendered to
+`docs/agent_skill_training_matrix.md` with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\render_agent_skill_matrix.py
+```
+
 ## Recommended Free/Low-Cost AI Stack
 
 Checked online on 2026-05-04.

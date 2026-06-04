@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Training Orchestration"
+  short_description: "Assign skills and drills to TradingAgents roles."
+  default_prompt: "Use this skill to train AI agents, assign role skills, design drills, and maintain the agent skill matrix."

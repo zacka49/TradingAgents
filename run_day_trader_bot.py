@@ -26,6 +26,7 @@ DEFAULT_UNIVERSE = ",".join(
         "NVDA",
         "INTC",
         "COIN",
+        "MSTR",
         "QQQ",
         "SPY",
         "PLTR",
@@ -68,6 +69,10 @@ DEFAULT_UNIVERSE = ",".join(
         "IWM",
         "SOXX",
         "IBIT",
+        "GBTC",
+        "BITO",
+        "ETHA",
+        "ETHE",
     ]
 )
 DEFAULT_RESULTS_DIR = "results/autonomous_day_trader"
@@ -154,6 +159,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-session-loss-usd", type=float, default=750.0)
     parser.add_argument("--max-session-drawdown-pct", type=float, default=1.0)
     parser.add_argument("--disable-session-risk-flatten", action="store_true")
+    parser.add_argument(
+        "--allow-carry-risk",
+        action="store_true",
+        help=(
+            "Allow the bot to start even when Alpaca paper already has open "
+            "positions or open orders."
+        ),
+    )
+    parser.add_argument(
+        "--flatten-existing-at-start",
+        action="store_true",
+        help=(
+            "If the account is not flat at startup, request a paper-account "
+            "flatten before running new strategy cycles."
+        ),
+    )
+    parser.add_argument("--entry-cooldown-minutes", type=int, default=20)
     parser.add_argument("--disable-news-politics", action="store_true")
     parser.add_argument("--disable-premarket-research", action="store_true")
     parser.add_argument("--news-max-symbols", type=int, default=None)
@@ -219,6 +241,9 @@ def settings_from_args(args: argparse.Namespace) -> AutonomousCEOSettings:
         max_session_loss_usd=args.max_session_loss_usd,
         max_session_drawdown_pct=args.max_session_drawdown_pct,
         flatten_on_session_risk_halt=not bool(args.disable_session_risk_flatten),
+        allow_carry_risk=bool(args.allow_carry_risk),
+        flatten_existing_at_start=bool(args.flatten_existing_at_start),
+        entry_cooldown_minutes=args.entry_cooldown_minutes,
     )
 
 
@@ -257,6 +282,8 @@ def terminal_message(payload: Dict[str, Any]) -> str:
             f"News/policy expansion: {settings.get('news_politics_scan_enabled')}. "
             f"Pre-open research: {settings.get('premarket_research_enabled')}. "
             f"Flatten before close: {settings.get('flatten_at_close')}. "
+            f"Flat start required: {settings.get('startup_flat_required')}. "
+            f"Entry cooldown: {settings.get('entry_cooldown_minutes')} minutes. "
             f"Stop file: {settings.get('stop_file') or 'default control file'}. "
             f"Log: {payload.get('log_file')}."
         )
@@ -269,12 +296,17 @@ def terminal_message(payload: Dict[str, Any]) -> str:
         )
     if event == "autonomous_ceo_session_end":
         risk = payload.get("session_risk", {})
+        report = payload.get("final_report", {})
+        report_text = ""
+        if report.get("written") and report.get("markdown_path"):
+            report_text = f" Final report: {report.get('markdown_path')}."
         return (
             f"Trading session {payload.get('session_id')} ended after "
             f"{payload.get('cycles_completed', 0)} cycle(s). "
             f"Final equity: ${float(payload.get('final_equity') or 0):.2f}. "
             f"Session loss: ${float(risk.get('loss_usd') or 0):.2f} "
             f"({float(risk.get('drawdown_pct') or 0):.3f}%)."
+            f"{report_text}"
         )
     if event == "autonomous_ceo_session_risk_halt":
         reasons = ", ".join(payload.get("breach_reasons", [])) or "session risk limit"
@@ -284,6 +316,27 @@ def terminal_message(payload: Dict[str, Any]) -> str:
             f"Loss: ${float(payload.get('loss_usd') or 0):.2f}, "
             f"drawdown {float(payload.get('drawdown_pct') or 0):.3f}%."
         )
+    if event == "autonomous_ceo_startup_flat_gate_blocked":
+        return (
+            "Startup safety gate blocked the run because the paper account is "
+            "not flat. "
+            f"Positions: {payload.get('positions_count', 0)}, "
+            f"open orders: {payload.get('open_orders_count', 0)}. "
+            f"Use {payload.get('required_override')} after review."
+        )
+    if event == "autonomous_ceo_startup_carry_risk_accepted":
+        return (
+            "Startup carry-risk override accepted. "
+            f"Continuing with {payload.get('positions_count', 0)} position(s) "
+            f"and {payload.get('open_orders_count', 0)} open order(s)."
+        )
+    if event == "autonomous_ceo_startup_flatten_start":
+        return (
+            "Startup account is not flat. I am requesting a flatten before "
+            "opening any new strategy cycle."
+        )
+    if event == "autonomous_ceo_startup_flatten_complete":
+        return "Startup flatten completed; account is flat enough to continue."
     if event == "manual_stop_request_received":
         action = payload.get("action")
         return (

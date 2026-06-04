@@ -1,0 +1,4 @@
+interface:
+  display_name: "News Catalyst Reversion"
+  short_description: "Research news shocks and reversion evidence."
+  default_prompt: "Use this skill to classify catalysts, test news continuation versus reversion, and evaluate price before/after/one-day-after news moves."

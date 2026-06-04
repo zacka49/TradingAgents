@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copy Flow Research"
+  short_description: "Research public disclosure and copy-flow signals."
+  default_prompt: "Use this skill for politician trades, insider transactions, disclosure lag, holder flows, and copy-trading risk analysis."

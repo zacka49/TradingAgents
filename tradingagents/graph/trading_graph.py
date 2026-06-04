@@ -120,6 +120,7 @@ class TradingAgentsGraph:
 
         self.deep_thinking_llm = deep_client.get_llm()
         self.quick_thinking_llm = quick_client.get_llm()
+        self.role_llms = self._create_role_llms(llm_kwargs)
         
         self.memory_log = TradingMemoryLog(self.config)
         self.training_memory_log = TrainingMemoryLog(self.config)
@@ -138,6 +139,7 @@ class TradingAgentsGraph:
             self.tool_nodes,
             self.conditional_logic,
             self.config,
+            self.role_llms,
         )
 
         self.propagator = Propagator()
@@ -176,6 +178,31 @@ class TradingAgentsGraph:
                 kwargs["effort"] = effort
 
         return kwargs
+
+    def _create_role_llms(self, llm_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        role_models = self.config.get("role_model_overrides") or {}
+        if not isinstance(role_models, dict):
+            return {}
+
+        role_llms: Dict[str, Any] = {}
+        model_cache: Dict[str, Any] = {
+            str(self.config["quick_think_llm"]): self.quick_thinking_llm,
+            str(self.config["deep_think_llm"]): self.deep_thinking_llm,
+        }
+        for role, model in role_models.items():
+            model_name = str(model or "").strip()
+            if not model_name:
+                continue
+            if model_name not in model_cache:
+                role_client = create_llm_client(
+                    provider=self.config["llm_provider"],
+                    model=model_name,
+                    base_url=self.config.get("backend_url"),
+                    **llm_kwargs,
+                )
+                model_cache[model_name] = role_client.get_llm()
+            role_llms[str(role)] = model_cache[model_name]
+        return role_llms
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""

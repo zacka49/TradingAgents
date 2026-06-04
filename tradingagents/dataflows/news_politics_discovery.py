@@ -83,7 +83,7 @@ THEME_TICKERS: Dict[str, Dict[str, Any]] = {
             "sec crypto",
             "digital asset",
         ],
-        "tickers": ["COIN", "MSTR", "HOOD", "IBIT", "GBTC", "BITO"],
+        "tickers": ["COIN", "MSTR", "HOOD", "IBIT", "GBTC", "BITO", "ETHA", "ETHE"],
     },
     "ai_chips_datacenter": {
         "keywords": [

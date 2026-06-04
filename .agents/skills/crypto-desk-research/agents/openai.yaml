@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crypto Desk Research"
+  short_description: "Research crypto strategies and 24/7 risk gates."
+  default_prompt: "Use this skill for crypto desk research, crypto-linked equities, 24/7 risk, fees, liquidity, and crypto paper-trading promotion requirements."

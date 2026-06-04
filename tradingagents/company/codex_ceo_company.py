@@ -25,6 +25,13 @@ from tradingagents.company.day_trading_strategy import (
     classify_day_trade_setup,
     classify_intraday_setup,
 )
+from tradingagents.company.strategy_research_department import (
+    StrategyResearchReport,
+    build_strategy_research_report,
+    load_strategy_research_report,
+    strategy_decision_for_name,
+    strategy_status_allows_paper_trade,
+)
 from tradingagents.company.technology_scout import (
     build_technology_capabilities,
     capabilities_as_dicts,
@@ -74,6 +81,9 @@ class MarketCandidate:
     backtest_trades: int = 0
     backtest_passed: bool = True
     backtest_note: str = ""
+    strategy_promotion_status: str = ""
+    strategy_evidence_score: float = 0.0
+    strategy_research_note: str = ""
     strategy_profile: str = "balanced"
     data_source: str = "daily"
     intraday_return_1m_pct: float = 0.0
@@ -204,6 +214,7 @@ class CodexCEOCompanyRunner:
         self.broker = broker or AlpacaPaperBroker()
         self._last_catalyst_context: Dict[str, Any] = {}
         self._last_order_plan_diagnostics: List[Dict[str, Any]] = []
+        self._last_strategy_research_report: StrategyResearchReport | None = None
 
     def run(
         self,
@@ -660,7 +671,7 @@ class CodexCEOCompanyRunner:
             strategy_note,
         ) = self._profile_strategy_controls(strategy, risk_flags)
 
-        return MarketCandidate(
+        candidate = MarketCandidate(
             ticker=ticker,
             latest_price=round(latest, 4),
             return_1d_pct=round(ret_1d, 3),
@@ -687,6 +698,8 @@ class CodexCEOCompanyRunner:
             day_trade_fit_score=day_trade_fit_score,
             day_trade_fit_reasons=day_trade_fit_reasons,
         )
+        self._apply_strategy_research_decision(candidate)
+        return candidate
 
     def _score_realtime_ticker(
         self,
@@ -857,7 +870,7 @@ class CodexCEOCompanyRunner:
             strategy_note,
         ) = self._profile_strategy_controls(strategy, risk_flags)
 
-        return MarketCandidate(
+        candidate = MarketCandidate(
             ticker=ticker,
             latest_price=round(latest, 4),
             return_1d_pct=round(return_5m, 3),
@@ -899,6 +912,8 @@ class CodexCEOCompanyRunner:
             day_trade_fit_score=day_trade_fit_score,
             day_trade_fit_reasons=day_trade_fit_reasons,
         )
+        self._apply_strategy_research_decision(candidate)
+        return candidate
 
     def _profile_strategy_controls(
         self,
@@ -1076,6 +1091,7 @@ class CodexCEOCompanyRunner:
             and candidate.strategy in allowed_strategies
             and candidate.strategy_confidence >= min_confidence
             and self._candidate_meets_day_trade_fit(candidate, min_fit_score)
+            and self._strategy_research_allows_candidate(candidate)
             and candidate.score >= float(self.config.get("realtime_score_minimum", -9999.0))
             and (
                 candidate.backtest_passed
@@ -1088,6 +1104,73 @@ class CodexCEOCompanyRunner:
         deploy_pct = float(self.config.get("portfolio_deploy_pct", 0.60))
         raw_weight = min(max_weight, deploy_pct / count)
         return {candidate.ticker: round(raw_weight, 4) for candidate in selected}
+
+    def _strategy_research_report(self) -> StrategyResearchReport:
+        if self._last_strategy_research_report is not None:
+            return self._last_strategy_research_report
+
+        library_dir = Path(
+            self.config.get("strategy_library_dir", "knowledge/strategy_library")
+        )
+        if not library_dir.is_absolute():
+            library_dir = self._project_root() / library_dir
+        report_path = library_dir / "strategy_research_report.json"
+        if report_path.is_file():
+            try:
+                self._last_strategy_research_report = load_strategy_research_report(report_path)
+                return self._last_strategy_research_report
+            except Exception:
+                pass
+
+        evidence_root = self.config.get("strategy_research_evidence_root")
+        if evidence_root:
+            root = Path(str(evidence_root))
+            if not root.is_absolute():
+                root = self._project_root() / root
+            self._last_strategy_research_report = build_strategy_research_report(
+                evidence_root=root
+            )
+        else:
+            self._last_strategy_research_report = build_strategy_research_report()
+        return self._last_strategy_research_report
+
+    def _apply_strategy_research_decision(self, candidate: MarketCandidate) -> None:
+        if not self.config.get("strategy_research_enabled", True):
+            return
+        decision = strategy_decision_for_name(
+            self._strategy_research_report(),
+            candidate.strategy,
+        )
+        candidate.strategy_promotion_status = decision.promotion_status
+        candidate.strategy_evidence_score = decision.metrics.evidence_score
+        candidate.strategy_research_note = decision.note
+        if (
+            self.config.get("strategy_research_gate_candidates", True)
+            and not self._strategy_decision_allows_trade(decision.promotion_status)
+        ):
+            candidate.auto_trade_allowed = False
+            if "strategy_not_promoted" not in candidate.risk_flags:
+                candidate.risk_flags.append("strategy_not_promoted")
+
+    def _strategy_research_allows_candidate(self, candidate: MarketCandidate) -> bool:
+        if not self.config.get("strategy_research_enabled", True):
+            return True
+        if not candidate.strategy_promotion_status:
+            self._apply_strategy_research_decision(candidate)
+        return self._strategy_decision_allows_trade(candidate.strategy_promotion_status)
+
+    def _strategy_decision_allows_trade(self, promotion_status: str) -> bool:
+        if not self.config.get("strategy_research_gate_targets", True):
+            return True
+        return strategy_status_allows_paper_trade(
+            promotion_status,
+            minimum_status=str(
+                self.config.get(
+                    "strategy_research_min_status_for_trading",
+                    "paper_trade_candidate",
+                )
+            ),
+        )
 
     def _candidate_meets_day_trade_fit(
         self,
@@ -1125,6 +1208,13 @@ class CodexCEOCompanyRunner:
         blocked_new_buys = {
             str(symbol).upper()
             for symbol in self.config.get("day_trade_block_new_buys_symbols", [])
+            if str(symbol).strip()
+        }
+        blocked_new_buy_reasons = {
+            str(symbol).upper(): str(reason)
+            for symbol, reason in dict(
+                self.config.get("day_trade_block_new_buys_reason_by_symbol", {})
+            ).items()
             if str(symbol).strip()
         }
         active_symbols = {
@@ -1183,7 +1273,10 @@ class CodexCEOCompanyRunner:
             if side == "buy" and ticker in blocked_new_buys:
                 self._record_order_plan_skip(
                     ticker,
-                    "blocked_by_same_cycle_profile_buy",
+                    blocked_new_buy_reasons.get(
+                        ticker,
+                        "blocked_by_same_cycle_profile_buy",
+                    ),
                 )
                 continue
             quantity = abs(delta) / candidate.latest_price
@@ -1542,6 +1635,11 @@ class CodexCEOCompanyRunner:
         submit: bool,
         ceo_approved: bool,
     ) -> None:
+        strategy_research_report = (
+            self._strategy_research_report()
+            if self.config.get("strategy_research_enabled", True)
+            else None
+        )
         payload = {
             "trade_date": trade_date,
             "account": self._account_summary(account),
@@ -1553,6 +1651,9 @@ class CodexCEOCompanyRunner:
             "target_weights": target_weights,
             "order_plans": [asdict(plan) for plan in order_plans],
             "order_plan_diagnostics": list(self._last_order_plan_diagnostics),
+            "strategy_research_report": (
+                asdict(strategy_research_report) if strategy_research_report else {}
+            ),
             "technology_capabilities": capabilities_as_dicts(technology_capabilities),
             "compute_policy_report": self.config.get("compute_policy_report", {}),
             "specialist_memory_context": self._specialist_memory_context(),
@@ -1580,6 +1681,7 @@ class CodexCEOCompanyRunner:
                 target_weights=target_weights,
                 order_plans=order_plans,
                 order_plan_diagnostics=self._last_order_plan_diagnostics,
+                strategy_research_report=strategy_research_report,
                 agent_scorecards=scorecards,
                 specialist_memory_context=payload["specialist_memory_context"],
                 staff_memo=staff_memo,
@@ -1612,6 +1714,7 @@ class CodexCEOCompanyRunner:
         target_weights: Dict[str, float],
         order_plans: Sequence[PortfolioOrderPlan],
         order_plan_diagnostics: Sequence[Dict[str, Any]],
+        strategy_research_report: StrategyResearchReport | None,
         agent_scorecards,
         specialist_memory_context: Dict[str, str],
         staff_memo: str,
@@ -1671,6 +1774,30 @@ class CodexCEOCompanyRunner:
         else:
             lines.append("No open Alpaca orders reported.")
 
+        if strategy_research_report:
+            lines.extend(
+                [
+                    "",
+                    "## Strategy Research Department",
+                    f"- Approved paper strategies: {', '.join(strategy_research_report.approved_strategy_ids) or 'none'}",
+                    f"- Paper trade candidates: {', '.join(strategy_research_report.paper_candidate_strategy_ids) or 'none'}",
+                    f"- Blocked/research-only strategies: {', '.join(strategy_research_report.blocked_strategy_ids) or 'none'}",
+                    "",
+                    "| Strategy | Status | Decision | Evidence | Note |",
+                    "| --- | --- | --- | ---: | --- |",
+                ]
+            )
+            for strategy in strategy_research_report.strategies[:12]:
+                lines.append(
+                    "| {strategy} | {status} | {decision} | {evidence:.2f} | {note} |".format(
+                        strategy=_md_cell(strategy.strategy_id),
+                        status=_md_cell(strategy.promotion_status),
+                        decision=_md_cell(strategy.decision),
+                        evidence=strategy.metrics.evidence_score,
+                        note=_md_cell(strategy.note, max_len=150),
+                    )
+                )
+
         research_queue = list(
             (self._last_catalyst_context or {}).get("ranked_research_queue", [])
         )
@@ -1703,15 +1830,15 @@ class CodexCEOCompanyRunner:
             [
                 "",
                 "## Top 10 Market Research Candidates",
-                "| Rank | Ticker | Price | 1D % | 5D % | 20D % | Vol Ratio | Fit | Strategy | Research | Risk | Score |",
-                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | ---: |",
+                "| Rank | Ticker | Price | 1D % | 5D % | 20D % | Vol Ratio | Fit | Strategy | Status | Research | Risk | Score |",
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | ---: |",
             ]
         )
         for rank, candidate in enumerate(candidates[:10], start=1):
             lines.append(
                 "| {rank} | {ticker} | {price:.2f} | {ret1:.2f} | {ret5:.2f} | "
                 "{ret20:.2f} | {vol_ratio:.2f} | {fit:.1f} | {strategy} | "
-                "{research} | {risk} | {score:.2f} |".format(
+                "{status} | {research} | {risk} | {score:.2f} |".format(
                     rank=rank,
                     ticker=candidate.ticker,
                     price=candidate.latest_price,
@@ -1721,6 +1848,7 @@ class CodexCEOCompanyRunner:
                     vol_ratio=candidate.volume_ratio,
                     fit=candidate.day_trade_fit_score,
                     strategy=f"{candidate.strategy} ({candidate.strategy_confidence:.2f})",
+                    status=_md_cell(candidate.strategy_promotion_status) or "unknown",
                     research=_md_cell(candidate.premarket_research_action) or "none",
                     risk=", ".join(candidate.risk_flags) or "none",
                     score=candidate.score,

@@ -36,6 +36,9 @@ ONLINE_LLM_PROVIDERS = {
 }
 
 LOCAL_QUICK_MODEL_PRIORITY = (
+    "qwen3:4b-instruct",
+    "llama3.2:3b",
+    "phi4-mini:latest",
     "qwen3:8b",
     "qwen3:latest",
     "qwen3:4b",
@@ -44,6 +47,9 @@ LOCAL_QUICK_MODEL_PRIORITY = (
 )
 
 LOCAL_DEEP_MODEL_PRIORITY = (
+    "qwen3:4b-instruct",
+    "phi4-mini-reasoning:latest",
+    "phi4-mini:latest",
     "gpt-oss:20b",
     "gpt-oss:latest",
     "qwen3:30b",
@@ -54,6 +60,35 @@ LOCAL_DEEP_MODEL_PRIORITY = (
     "qwen3:4b",
     "qwen3:0.6b",
 )
+
+LOCAL_ROLE_MODEL_FALLBACKS = {
+    "opportunity_scout": "quick",
+    "stock_discovery": "quick",
+    "market_analyst": "quick",
+    "social_media_analyst": "quick",
+    "news_analyst": "quick",
+    "fundamentals_analyst": "quick",
+    "current_news_scout": "quick",
+    "strategy_researcher": "quick",
+    "copy_trading_researcher": "quick",
+    "github_researcher": "quick",
+    "research_director": "deep",
+    "bull_researcher": "quick",
+    "bear_researcher": "quick",
+    "research_manager": "deep",
+    "chief_investment_officer": "deep",
+    "trading_desk_strategist": "quick",
+    "risk_office_guardian": "deep",
+    "portfolio_office_allocator": "quick",
+    "operations_compliance_auditor": "quick",
+    "evaluation_analyst": "deep",
+    "training_development_coach": "deep",
+    "trader": "quick",
+    "aggressive_debator": "quick",
+    "neutral_debator": "deep",
+    "conservative_debator": "deep",
+    "portfolio_manager": "deep",
+}
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -239,6 +274,29 @@ def apply_compute_policy(config: Dict[str, Any]) -> Dict[str, Any]:
         reasons.append(f"staff model '{staff_model}' replaced with '{quick}'")
         guarded["ollama_staff_model"] = quick
 
+    role_models = guarded.get("role_model_overrides") or {}
+    if isinstance(role_models, dict):
+        guarded_role_models: Dict[str, str] = {}
+        installed = set(installed_models)
+        for role, model in role_models.items():
+            role_name = str(role)
+            role_model = str(model or "").strip()
+            fallback_kind = LOCAL_ROLE_MODEL_FALLBACKS.get(role_name, "quick")
+            fallback_model = deep if fallback_kind == "deep" else quick
+            if (
+                not role_model
+                or is_cloud_ollama_model(role_model)
+                or (installed_models and role_model not in installed)
+            ):
+                if role_model:
+                    reasons.append(
+                        f"role model '{role_name}:{role_model}' replaced with '{fallback_model}'"
+                    )
+                guarded_role_models[role_name] = fallback_model
+            else:
+                guarded_role_models[role_name] = role_model
+        guarded["role_model_overrides"] = guarded_role_models
+
     guarded["compute_policy_report"] = {
         "mode": mode,
         "online_llm_allowed": False,
@@ -246,6 +304,7 @@ def apply_compute_policy(config: Dict[str, Any]) -> Dict[str, Any]:
         "provider": guarded.get("llm_provider"),
         "quick_model": guarded.get("quick_think_llm"),
         "deep_model": guarded.get("deep_think_llm"),
+        "role_models": guarded.get("role_model_overrides", {}),
         "installed_local_models": installed_models,
         "reasons": reasons,
     }

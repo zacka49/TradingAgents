@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Quality Strategy Governance"
+  short_description: "Govern strategy evidence and promotion gates."
+  default_prompt: "Use this skill to audit data quality, sample size, strategy promotion, P&L attribution, and whether a desk can move from research to paper trading."

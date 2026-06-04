@@ -78,6 +78,11 @@ class AutonomousCEOSettings:
     max_session_drawdown_pct: float = 1.0
     flatten_on_session_risk_halt: bool = True
     stop_file: str | None = None
+    startup_flat_required: bool = True
+    allow_carry_risk: bool = False
+    flatten_existing_at_start: bool = False
+    entry_cooldown_minutes: int = 20
+    final_session_report_enabled: bool = True
 
 
 class AutonomousPaperCEOAgent:
@@ -115,13 +120,19 @@ class AutonomousPaperCEOAgent:
         self.session_started_at = self.now_fn()
         self.session_initial_equity: float | None = None
         self.symbol_cooldowns: Dict[str, float] = {}
+        self.symbol_cooldown_reasons: Dict[str, str] = {}
+        self.last_flatten_result: Dict[str, Any] | None = None
 
     def run(self, event_sink: EventSink | None = None) -> int:
         sink = event_sink or print_json_event
         cycle = 0
 
-        self.start_session(sink)
+        startup_snapshot = self.start_session(sink)
         try:
+            if self.handle_stop_request(sink):
+                return 0
+            if not self.handle_startup_flat_gate(sink, startup_snapshot):
+                return 0
             while True:
                 if self.handle_stop_request(sink):
                     return 0
@@ -203,7 +214,7 @@ class AutonomousPaperCEOAgent:
         finally:
             self.finish_session(sink, cycles_completed=cycle)
 
-    def start_session(self, sink: EventSink) -> None:
+    def start_session(self, sink: EventSink) -> Dict[str, Any]:
         snapshot = self.broker_snapshot()
         account = snapshot.get("account", {})
         self.session_initial_equity = account_equity(account)
@@ -233,31 +244,172 @@ class AutonomousPaperCEOAgent:
                     "momentum_decay_min_minutes": self.settings.momentum_decay_min_minutes,
                     "momentum_decay_min_gain_pct": self.settings.momentum_decay_min_gain_pct,
                     "momentum_decay_max_loss_pct": self.settings.momentum_decay_max_loss_pct,
+                    "startup_flat_required": self.settings.startup_flat_required,
+                    "allow_carry_risk": self.settings.allow_carry_risk,
+                    "flatten_existing_at_start": self.settings.flatten_existing_at_start,
+                    "entry_cooldown_minutes": self.settings.entry_cooldown_minutes,
                 },
             }
         )
+        return snapshot
 
     def finish_session(self, sink: EventSink, *, cycles_completed: int) -> None:
         snapshot = self.broker_snapshot()
         account = snapshot.get("account", {})
+        session_end = {
+            "event": "autonomous_ceo_session_end",
+            "session_id": self.session_id,
+            "started_at": self.session_started_at.isoformat(),
+            "finished_at": self.now_fn().isoformat(),
+            "cycles_completed": cycles_completed,
+            "initial_equity": self.session_initial_equity,
+            "final_equity": account_equity(account),
+            "session_risk": self.session_risk_snapshot(account),
+            "positions_count": len(snapshot.get("positions", [])),
+            "open_orders_count": len(snapshot.get("open_orders", [])),
+            "positions": summarize_positions(snapshot.get("positions", [])),
+            "open_orders": summarize_open_orders(snapshot.get("open_orders", [])),
+            "symbol_cooldowns": self.active_cooldown_payload(),
+            "clock": snapshot.get("clock", {}),
+            "flatten_result": self.last_flatten_result
+            or {"event": "not_attempted", "reason": "no_flatten_requested"},
+        }
+        session_end["final_report"] = self.write_final_session_report(
+            session_end=session_end,
+            snapshot=snapshot,
+        )
+        sink(session_end)
+
+    def handle_startup_flat_gate(
+        self,
+        sink: EventSink,
+        snapshot: Dict[str, Any],
+    ) -> bool:
+        if not self.settings.startup_flat_required:
+            return True
+
+        positions = list(snapshot.get("positions", []))
+        open_orders = list(snapshot.get("open_orders", []))
+        if not positions and not open_orders:
+            return True
+
+        if self.settings.flatten_existing_at_start:
+            sink(
+                {
+                    "event": "autonomous_ceo_startup_flatten_start",
+                    "session_id": self.session_id,
+                    "reason": "startup_account_not_flat",
+                    "positions_count": len(positions),
+                    "open_orders_count": len(open_orders),
+                    "positions": summarize_positions(positions),
+                    "open_orders": summarize_open_orders(open_orders),
+                }
+            )
+            self.flatten_day_trader_positions(
+                sink,
+                reason="startup_flatten_existing_positions",
+            )
+            post_flatten = self.broker_snapshot()
+            post_positions = list(post_flatten.get("positions", []))
+            post_orders = list(post_flatten.get("open_orders", []))
+            if not post_positions and not post_orders:
+                sink(
+                    {
+                        "event": "autonomous_ceo_startup_flatten_complete",
+                        "session_id": self.session_id,
+                        "positions_count": 0,
+                        "open_orders_count": 0,
+                    }
+                )
+                return True
+            sink(
+                {
+                    "event": "autonomous_ceo_startup_flat_gate_blocked",
+                    "session_id": self.session_id,
+                    "reason": "startup_flatten_incomplete",
+                    "positions_count": len(post_positions),
+                    "open_orders_count": len(post_orders),
+                    "positions": summarize_positions(post_positions),
+                    "open_orders": summarize_open_orders(post_orders),
+                }
+            )
+            return False
+
+        if self.settings.allow_carry_risk:
+            sink(
+                {
+                    "event": "autonomous_ceo_startup_carry_risk_accepted",
+                    "session_id": self.session_id,
+                    "reason": "operator_allowed_non_flat_start",
+                    "positions_count": len(positions),
+                    "open_orders_count": len(open_orders),
+                    "positions": summarize_positions(positions),
+                    "open_orders": summarize_open_orders(open_orders),
+                }
+            )
+            return True
+
         sink(
             {
-                "event": "autonomous_ceo_session_end",
+                "event": "autonomous_ceo_startup_flat_gate_blocked",
                 "session_id": self.session_id,
-                "started_at": self.session_started_at.isoformat(),
-                "finished_at": self.now_fn().isoformat(),
-                "cycles_completed": cycles_completed,
-                "initial_equity": self.session_initial_equity,
-                "final_equity": account_equity(account),
-                "session_risk": self.session_risk_snapshot(account),
-                "positions_count": len(snapshot.get("positions", [])),
-                "open_orders_count": len(snapshot.get("open_orders", [])),
-                "positions": summarize_positions(snapshot.get("positions", [])),
-                "open_orders": summarize_open_orders(snapshot.get("open_orders", [])),
-                "symbol_cooldowns": self.active_cooldown_payload(),
-                "clock": snapshot.get("clock", {}),
+                "reason": "account_not_flat_at_start",
+                "positions_count": len(positions),
+                "open_orders_count": len(open_orders),
+                "positions": summarize_positions(positions),
+                "open_orders": summarize_open_orders(open_orders),
+                "required_override": "pass --allow-carry-risk or --flatten-existing-at-start",
             }
         )
+        return False
+
+    def write_final_session_report(
+        self,
+        *,
+        session_end: Dict[str, Any],
+        snapshot: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if not self.settings.final_session_report_enabled:
+            return {"enabled": False}
+
+        try:
+            reports_dir = Path(self.settings.results_dir) / "session_reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            safe_session_id = "".join(
+                char if char.isalnum() or char in {"_", "-"} else "_"
+                for char in self.session_id
+            )
+            json_path = reports_dir / f"{safe_session_id}_final.json"
+            markdown_path = reports_dir / f"{safe_session_id}_final.md"
+            report_payload = {
+                "session": dict(session_end),
+                "snapshot": snapshot,
+                "settings": asdict(self.settings),
+                "flat": not snapshot.get("positions") and not snapshot.get("open_orders"),
+                "written_at": self.now_fn().isoformat(),
+            }
+            json_path.write_text(
+                json.dumps(report_payload, indent=2, default=str),
+                encoding="utf-8",
+            )
+            markdown_path.write_text(
+                render_final_session_markdown(report_payload),
+                encoding="utf-8",
+            )
+            return {
+                "enabled": True,
+                "written": True,
+                "json_path": str(json_path),
+                "markdown_path": str(markdown_path),
+                "flat": bool(report_payload["flat"]),
+            }
+        except Exception as exc:
+            return {
+                "enabled": True,
+                "written": False,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
 
     def broker_snapshot(self) -> Dict[str, Any]:
         snapshot: Dict[str, Any] = {
@@ -589,15 +741,15 @@ class AutonomousPaperCEOAgent:
         try:
             positions = list(self.broker.get_positions().get("positions", []))
         except Exception as exc:
-            sink(
-                {
-                    "event": "autonomous_ceo_eod_flatten_error",
-                    "stage": "get_positions",
-                    "reason": reason,
-                    "error_type": type(exc).__name__,
-                    "error": str(exc),
-                }
-            )
+            event = {
+                "event": "autonomous_ceo_eod_flatten_error",
+                "stage": "get_positions",
+                "reason": reason,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+            self.last_flatten_result = event
+            sink(event)
             return
 
         try:
@@ -606,15 +758,15 @@ class AutonomousPaperCEOAgent:
             open_orders = []
 
         if not positions and not open_orders:
-            sink(
-                {
-                    "event": "autonomous_ceo_eod_flatten_skipped",
-                    "reason": reason,
-                    "seconds_to_close": seconds_to_close,
-                    "positions_count": 0,
-                    "open_orders_count": 0,
-                }
-            )
+            event = {
+                "event": "autonomous_ceo_eod_flatten_skipped",
+                "reason": reason,
+                "seconds_to_close": seconds_to_close,
+                "positions_count": 0,
+                "open_orders_count": 0,
+            }
+            self.last_flatten_result = event
+            sink(event)
             return
 
         sink(
@@ -633,24 +785,24 @@ class AutonomousPaperCEOAgent:
             response = self.broker.close_all_positions(
                 cancel_orders=bool(self.settings.cancel_orders_before_flatten)
             )
-            sink(
-                {
-                    "event": "autonomous_ceo_eod_flatten_complete",
-                    "reason": reason,
-                    "cancel_orders": bool(self.settings.cancel_orders_before_flatten),
-                    "response": response,
-                }
-            )
+            event = {
+                "event": "autonomous_ceo_eod_flatten_complete",
+                "reason": reason,
+                "cancel_orders": bool(self.settings.cancel_orders_before_flatten),
+                "response": response,
+            }
+            self.last_flatten_result = event
+            sink(event)
         except Exception as exc:
-            sink(
-                {
-                    "event": "autonomous_ceo_eod_flatten_error",
-                    "stage": "close_all_positions",
-                    "reason": reason,
-                    "error_type": type(exc).__name__,
-                    "error": str(exc),
-                }
-            )
+            event = {
+                "event": "autonomous_ceo_eod_flatten_error",
+                "stage": "close_all_positions",
+                "reason": reason,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+            self.last_flatten_result = event
+            sink(event)
 
     def run_cycle(
         self, cycle: int, event_sink: EventSink | None = None
@@ -665,6 +817,17 @@ class AutonomousPaperCEOAgent:
         cycle_buy_symbols: set[str] = set()
         for profile in self.settings.profiles:
             cooldown_symbols = self.active_cooldown_symbols()
+            blocked_new_buys = cycle_buy_symbols | cooldown_symbols
+            blocked_new_buy_reasons = {
+                symbol: self.symbol_cooldown_reasons.get(symbol, "symbol_cooldown")
+                for symbol in cooldown_symbols
+            }
+            blocked_new_buy_reasons.update(
+                {
+                    symbol: "blocked_by_same_cycle_profile_buy"
+                    for symbol in cycle_buy_symbols
+                }
+            )
             if event_sink:
                 event_sink(
                     {
@@ -673,19 +836,23 @@ class AutonomousPaperCEOAgent:
                         "cycle": cycle,
                         "strategy_profile": profile,
                         "stage": "research_strategy_and_trade",
-                        "blocked_new_buys": sorted(cycle_buy_symbols | cooldown_symbols),
+                        "blocked_new_buys": sorted(blocked_new_buys),
+                        "blocked_new_buy_reasons": blocked_new_buy_reasons,
                     }
                 )
             profile_result = self.run_profile(
                 profile,
-                blocked_new_buys=cycle_buy_symbols | cooldown_symbols,
+                blocked_new_buys=blocked_new_buys,
+                blocked_new_buy_reasons=blocked_new_buy_reasons,
             )
             payload["profiles"].append(profile_result)
-            cycle_buy_symbols.update(
+            submitted_buy_symbols = {
                 str(order.get("ticker", "")).upper()
                 for order in profile_result.get("orders", [])
                 if order.get("submitted") and str(order.get("side", "")).lower() == "buy"
-            )
+            }
+            cycle_buy_symbols.update(submitted_buy_symbols)
+            self.apply_entry_cooldowns(submitted_buy_symbols)
             if event_sink:
                 event_sink(profile_stage_summary(cycle, profile_result))
                 for order_event in profile_order_events(cycle, profile_result):
@@ -699,10 +866,15 @@ class AutonomousPaperCEOAgent:
         profile: str,
         *,
         blocked_new_buys: set[str] | None = None,
+        blocked_new_buy_reasons: Dict[str, str] | None = None,
     ) -> Dict[str, Any]:
         config = self._profile_config(profile)
         if blocked_new_buys:
             config["day_trade_block_new_buys_symbols"] = sorted(blocked_new_buys)
+        if blocked_new_buy_reasons:
+            config["day_trade_block_new_buys_reason_by_symbol"] = dict(
+                blocked_new_buy_reasons
+            )
         runner = self.runner_factory(config, self.broker)
         result = runner.run(
             trade_date=self.now_fn().strftime("%Y-%m-%d"),
@@ -724,6 +896,21 @@ class AutonomousPaperCEOAgent:
                 getattr(runner, "_last_order_plan_diagnostics", [])
             ),
         }
+
+    def apply_entry_cooldowns(self, symbols: Sequence[str]) -> None:
+        cooldown_minutes = max(0, int(self.settings.entry_cooldown_minutes))
+        if cooldown_minutes <= 0:
+            return
+        clean_symbols = {str(symbol).upper() for symbol in symbols if str(symbol).strip()}
+        if not clean_symbols:
+            return
+        cooldown_until = self.now_fn().timestamp() + cooldown_minutes * 60
+        for symbol in clean_symbols:
+            self.symbol_cooldowns[symbol] = max(
+                cooldown_until,
+                self.symbol_cooldowns.get(symbol, 0.0),
+            )
+            self.symbol_cooldown_reasons[symbol] = "blocked_by_recent_entry_cooldown"
 
     def monitor_positions_until_next_cycle(
         self, sleep_seconds: int, cycle: int, sink: EventSink
@@ -951,6 +1138,9 @@ class AutonomousPaperCEOAgent:
                 cooldown_until,
                 self.symbol_cooldowns.get(symbol, 0.0),
             )
+            self.symbol_cooldown_reasons[symbol] = (
+                f"blocked_by_{exit_event.get('reason')}_cooldown"
+            )
             exit_event["cooldown_until"] = cooldown_iso
 
     def active_cooldown_symbols(self) -> set[str]:
@@ -958,6 +1148,7 @@ class AutonomousPaperCEOAgent:
         for symbol in list(self.symbol_cooldowns):
             if self.symbol_cooldowns[symbol] <= now_ts:
                 self.symbol_cooldowns.pop(symbol, None)
+                self.symbol_cooldown_reasons.pop(symbol, None)
         return set(self.symbol_cooldowns)
 
     def active_cooldown_payload(self) -> List[Dict[str, Any]]:
@@ -970,6 +1161,10 @@ class AutonomousPaperCEOAgent:
                         self.symbol_cooldowns[symbol],
                         tz=UTC,
                     ).isoformat(),
+                    "reason": self.symbol_cooldown_reasons.get(
+                        symbol,
+                        "symbol_cooldown",
+                    ),
                 }
             )
         return payload
@@ -1406,6 +1601,118 @@ def account_equity(account: Dict[str, Any]) -> float:
         if value > 0:
             return value
     return 0.0
+
+
+def render_final_session_markdown(report_payload: Dict[str, Any]) -> str:
+    session = report_payload.get("session", {})
+    snapshot = report_payload.get("snapshot", {})
+    account = snapshot.get("account", {})
+    positions = list(snapshot.get("positions", []))
+    open_orders = list(snapshot.get("open_orders", []))
+    initial_equity = safe_float(session.get("initial_equity"))
+    final_equity = safe_float(session.get("final_equity"))
+    day_change = final_equity - initial_equity if initial_equity > 0 else 0.0
+    flat = not positions and not open_orders
+    flatten_result = session.get("flatten_result") or {}
+
+    lines = [
+        f"# Final Session Report - {session.get('session_id', 'unknown')}",
+        "",
+        "Paper account only. This is an operational session record, not financial advice.",
+        "",
+        "## Session",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+        f"| Started | {session.get('started_at', '')} |",
+        f"| Finished | {session.get('finished_at', '')} |",
+        f"| Cycles completed | {session.get('cycles_completed', 0)} |",
+        f"| Initial equity | {format_money(initial_equity)} |",
+        f"| Final equity | {format_money(final_equity)} |",
+        f"| Change vs initial | {format_money(day_change)} |",
+        f"| Open positions | {len(positions)} |",
+        f"| Open orders | {len(open_orders)} |",
+        f"| Flat for next session | {'yes' if flat else 'no'} |",
+        "",
+        "## Flatten Result",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        f"| Event | {flatten_result.get('event', 'not_attempted')} |",
+        f"| Reason | {flatten_result.get('reason', '')} |",
+        f"| Cancel orders | {flatten_result.get('cancel_orders', '')} |",
+        "",
+        "## Account",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+        f"| Account status | {account.get('status', '')} |",
+        f"| Trading blocked | {account.get('trading_blocked', '')} |",
+        f"| Cash | {format_money(safe_float(account.get('cash')))} |",
+        f"| Buying power | {format_money(safe_float(account.get('buying_power')))} |",
+        f"| Long market value | {format_money(safe_float(account.get('long_market_value')))} |",
+        f"| Portfolio value | {format_money(safe_float(account.get('portfolio_value')))} |",
+    ]
+
+    lines.extend(["", "## Positions", ""])
+    if positions:
+        lines.extend(
+            [
+                "| Symbol | Qty | Market Value | Unrealized P/L |",
+                "| --- | ---: | ---: | ---: |",
+            ]
+        )
+        for position in positions:
+            lines.append(
+                "| {symbol} | {qty} | {market_value} | {unrealized_pl} |".format(
+                    symbol=position.get("symbol", ""),
+                    qty=position.get("qty", ""),
+                    market_value=format_money(safe_float(position.get("market_value"))),
+                    unrealized_pl=format_money(safe_float(position.get("unrealized_pl"))),
+                )
+            )
+    else:
+        lines.append("No open positions reported.")
+
+    lines.extend(["", "## Open Orders", ""])
+    if open_orders:
+        lines.extend(
+            [
+                "| Symbol | Side | Qty | Type | Status | Limit | Stop |",
+                "| --- | --- | ---: | --- | --- | ---: | ---: |",
+            ]
+        )
+        for order in open_orders:
+            lines.append(
+                "| {symbol} | {side} | {qty} | {type} | {status} | {limit} | {stop} |".format(
+                    symbol=order.get("symbol", ""),
+                    side=order.get("side", ""),
+                    qty=order.get("qty", ""),
+                    type=order.get("type") or order.get("order_type") or "",
+                    status=order.get("status", ""),
+                    limit=order.get("limit_price") or "",
+                    stop=order.get("stop_price") or "",
+                )
+            )
+    else:
+        lines.append("No open orders reported.")
+
+    if snapshot.get("errors"):
+        lines.extend(["", "## Snapshot Errors", ""])
+        for error in snapshot.get("errors", []):
+            lines.append(
+                "- {stage}: {error_type}: {error}".format(
+                    stage=error.get("stage", ""),
+                    error_type=error.get("type", ""),
+                    error=error.get("error", ""),
+                )
+            )
+
+    return "\n".join(lines) + "\n"
+
+
+def format_money(value: float) -> str:
+    return f"${float(value):,.2f}"
 
 
 def floor_quantity(value: float, precision: int = 4) -> float:

@@ -3,12 +3,14 @@ from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
+from tradingagents.company.agent_skill_registry import render_compact_agent_skill_context
 
 
 def create_training_development_coach(llm):
     def training_development_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         training_context = build_training_context(state)
+        skill_matrix_context = render_compact_agent_skill_context()
         prompt = f"""You are the AI Training and Development Department.
 
 {instrument_context}
@@ -18,6 +20,8 @@ Read the run outputs below and produce role-specific training guidance. This is
 not a trading recommendation and must not override the final portfolio decision.
 It is an internal curriculum for improving future agent performance.
 {training_context}
+
+{skill_matrix_context}
 
 Opportunity Scout:
 {state.get("opportunity_scout_report", "")}

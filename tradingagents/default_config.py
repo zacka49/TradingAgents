@@ -32,8 +32,8 @@ DEFAULT_CONFIG = {
     "allowed_symbols": [],  # empty => allow all symbols
     # LLM settings
     "llm_provider": os.getenv("TRADINGAGENTS_LLM_PROVIDER", "ollama"),
-    "deep_think_llm": os.getenv("TRADINGAGENTS_DEEP_MODEL", os.getenv("OLLAMA_DEEP_MODEL", "qwen3:0.6b")),
-    "quick_think_llm": os.getenv("TRADINGAGENTS_QUICK_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:0.6b")),
+    "deep_think_llm": os.getenv("TRADINGAGENTS_DEEP_MODEL", os.getenv("OLLAMA_DEEP_MODEL", "qwen3:4b-instruct")),
+    "quick_think_llm": os.getenv("TRADINGAGENTS_QUICK_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:4b-instruct")),
     # Local-first compute policy. Hosted LLM providers and Ollama cloud models
     # are blocked by default so iterative runs do not quietly burn token quota.
     # To opt in deliberately, set:
@@ -44,6 +44,9 @@ DEFAULT_CONFIG = {
     in {"1", "true", "yes", "y", "on"},
     "ollama_model_probe_timeout_seconds": 1.0,
     "local_quick_model_priority": [
+        "qwen3:4b-instruct",
+        "llama3.2:3b",
+        "phi4-mini:latest",
         "qwen3:8b",
         "qwen3:latest",
         "qwen3:4b",
@@ -51,6 +54,9 @@ DEFAULT_CONFIG = {
         "qwen3:0.6b",
     ],
     "local_deep_model_priority": [
+        "qwen3:4b-instruct",
+        "phi4-mini-reasoning:latest",
+        "phi4-mini:latest",
         "gpt-oss:20b",
         "gpt-oss:latest",
         "qwen3:30b",
@@ -61,6 +67,34 @@ DEFAULT_CONFIG = {
         "qwen3:4b",
         "qwen3:0.6b",
     ],
+    "role_model_overrides": {
+        "opportunity_scout": os.getenv("TRADINGAGENTS_OPPORTUNITY_SCOUT_MODEL", "llama3.2:3b"),
+        "stock_discovery": os.getenv("TRADINGAGENTS_STOCK_DISCOVERY_MODEL", "qwen3:4b-instruct"),
+        "market_analyst": os.getenv("TRADINGAGENTS_MARKET_ANALYST_MODEL", "qwen3:4b-instruct"),
+        "social_media_analyst": os.getenv("TRADINGAGENTS_SOCIAL_ANALYST_MODEL", "llama3.2:3b"),
+        "news_analyst": os.getenv("TRADINGAGENTS_NEWS_ANALYST_MODEL", "llama3.2:3b"),
+        "fundamentals_analyst": os.getenv("TRADINGAGENTS_FUNDAMENTALS_ANALYST_MODEL", "qwen3:4b-instruct"),
+        "current_news_scout": os.getenv("TRADINGAGENTS_CURRENT_NEWS_MODEL", "llama3.2:3b"),
+        "strategy_researcher": os.getenv("TRADINGAGENTS_STRATEGY_RESEARCHER_MODEL", "qwen3:4b-instruct"),
+        "copy_trading_researcher": os.getenv("TRADINGAGENTS_COPY_TRADING_MODEL", "qwen3:4b-instruct"),
+        "github_researcher": os.getenv("TRADINGAGENTS_GITHUB_RESEARCH_MODEL", "llama3.2:3b"),
+        "research_director": os.getenv("TRADINGAGENTS_RESEARCH_DIRECTOR_MODEL", "qwen3:4b-instruct"),
+        "bull_researcher": os.getenv("TRADINGAGENTS_BULL_RESEARCHER_MODEL", "qwen3:4b-instruct"),
+        "bear_researcher": os.getenv("TRADINGAGENTS_BEAR_RESEARCHER_MODEL", "qwen3:4b-instruct"),
+        "research_manager": os.getenv("TRADINGAGENTS_RESEARCH_MANAGER_MODEL", "qwen3:4b-instruct"),
+        "chief_investment_officer": os.getenv("TRADINGAGENTS_CIO_MODEL", "qwen3:4b-instruct"),
+        "trading_desk_strategist": os.getenv("TRADINGAGENTS_TRADING_DESK_MODEL", "qwen3:4b-instruct"),
+        "risk_office_guardian": os.getenv("TRADINGAGENTS_RISK_OFFICE_MODEL", "qwen3:4b-instruct"),
+        "portfolio_office_allocator": os.getenv("TRADINGAGENTS_PORTFOLIO_OFFICE_MODEL", "qwen3:4b-instruct"),
+        "operations_compliance_auditor": os.getenv("TRADINGAGENTS_OPERATIONS_MODEL", "qwen3:4b-instruct"),
+        "evaluation_analyst": os.getenv("TRADINGAGENTS_EVALUATION_MODEL", "qwen3:4b-instruct"),
+        "training_development_coach": os.getenv("TRADINGAGENTS_TRAINING_COACH_MODEL", "qwen3:4b-instruct"),
+        "trader": os.getenv("TRADINGAGENTS_TRADER_MODEL", "qwen3:4b-instruct"),
+        "aggressive_debator": os.getenv("TRADINGAGENTS_AGGRESSIVE_RISK_MODEL", "qwen3:4b-instruct"),
+        "neutral_debator": os.getenv("TRADINGAGENTS_NEUTRAL_RISK_MODEL", "qwen3:4b-instruct"),
+        "conservative_debator": os.getenv("TRADINGAGENTS_CONSERVATIVE_RISK_MODEL", "qwen3:4b-instruct"),
+        "portfolio_manager": os.getenv("TRADINGAGENTS_PORTFOLIO_MANAGER_MODEL", "qwen3:4b-instruct"),
+    },
     # When None, each provider's client falls back to its own default endpoint
     # (api.openai.com for OpenAI, generativelanguage.googleapis.com for Gemini, ...).
     # The CLI overrides this per provider when the user picks one. Keeping a
@@ -107,7 +141,7 @@ DEFAULT_CONFIG = {
     "autonomous_paper_trading_enabled": False,
     "ollama_base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
     "ollama_staff_memo_enabled": True,
-    "ollama_staff_model": os.getenv("OLLAMA_STAFF_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:0.6b")),
+    "ollama_staff_model": os.getenv("OLLAMA_STAFF_MODEL", os.getenv("OLLAMA_QUICK_MODEL", "qwen3:4b-instruct")),
     "ollama_temperature": 0.1,
     "ollama_num_ctx": 2048,
     "ollama_num_predict": 350,
@@ -180,6 +214,18 @@ DEFAULT_CONFIG = {
     "backtest_lab_min_bars": 40,
     "backtest_lab_min_strategy_return_pct": -10.0,
     "backtest_lab_min_excess_return_pct": -8.0,
+    "strategy_research_enabled": True,
+    "strategy_research_gate_candidates": True,
+    "strategy_research_gate_targets": True,
+    "strategy_research_min_status_for_trading": "paper_trade_candidate",
+    "strategy_library_dir": os.getenv(
+        "TRADINGAGENTS_STRATEGY_LIBRARY_DIR",
+        "knowledge/strategy_library",
+    ),
+    "strategy_research_evidence_root": os.getenv(
+        "TRADINGAGENTS_STRATEGY_EVIDENCE_ROOT",
+        "",
+    ),
     "technology_scout_enabled": True,
     # Debate and discussion settings
     "max_debate_rounds": 1,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Forex Macro Research"
+  short_description: "Research FX and macro context without FX execution."
+  default_prompt: "Use this skill for forex, USD, rates, inflation, central-bank, and macro context while keeping direct FX trading research-only."

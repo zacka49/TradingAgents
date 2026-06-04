@@ -1,0 +1,4 @@
+interface:
+  display_name: "Equities Momentum Desk"
+  short_description: "Operate equity momentum and breakout research."
+  default_prompt: "Use this skill for liquid US stock and ETF momentum, relative strength, opening range, VWAP, and equity paper-trading readiness."

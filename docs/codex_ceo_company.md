@@ -102,6 +102,23 @@ Defaults favor weak local hardware:
 - Backtest Lab lives in `tradingagents/company/backtest_lab.py`; use
   `--no-backtest-lab` to skip it or `--allow-weak-backtests` to make it
   advisory only.
+- Strategy Research Department lives in
+  `tradingagents/company/strategy_research_department.py`; run
+  `scripts/run_strategy_research_department.py` to generate/update
+  `knowledge/strategy_library/`. Trading can only allocate to promoted
+  strategy IDs.
+- News Reversion Desk lives in `tradingagents/company/news_reversion_desk.py`
+  and can produce a standalone event-study report with
+  `scripts/backtest_news_reversion_strategy.py`. It tests whether recent
+  headlines caused a close-to-close move that reverted toward the pre-news
+  close on the next trading day.
+- Multi-desk governance lives in
+  `tradingagents/company/business_governance.py` and is documented in
+  `docs/multi_desk_business_model.md`. It separates equities, news, crypto,
+  macro ETF, and forex research while keeping order authority centralized.
+- Agent skill assignments live in
+  `tradingagents/company/agent_skill_registry.py`; render the full training
+  table with `scripts/render_agent_skill_matrix.py`.
 - Autonomous safe/risky profile settings live in
   `tradingagents/company/strategy_profiles.py`.
 - The market-hours loop lives in `scripts/run_autonomous_day_trader.py`.

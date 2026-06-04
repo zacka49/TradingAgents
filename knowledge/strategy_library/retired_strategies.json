@@ -1,0 +1,78 @@
+[
+  {
+    "strategy_id": "vwap_reclaim",
+    "desk": "Equities Momentum Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "A reclaim of VWAP after early weakness may mean buyers regained control.",
+    "entry_rules": [
+      "Prior trade below VWAP",
+      "Close reclaims VWAP",
+      "Volume confirms"
+    ],
+    "exit_rules": [
+      "Stop below reclaim/VWAP",
+      "Take-profit near measured risk"
+    ],
+    "risk_rules": [
+      "Research-only until positive out-of-sample evidence"
+    ],
+    "required_data": [
+      "intraday bars",
+      "VWAP",
+      "quote spread",
+      "volume"
+    ],
+    "promotion_status": "retired",
+    "metrics": {
+      "trades": 339,
+      "win_rate_pct": 42.353,
+      "total_return_pct": -0.791,
+      "profit_factor": 0.975,
+      "max_drawdown_pct": 3.712,
+      "expectancy_pct": 0.0,
+      "evidence_score": 4.264,
+      "source": "results\\company_validation\\2026-06-04\\intraday_strategy_backtest\\strategy_aggregate.csv"
+    },
+    "decision": "blocked",
+    "note": "Demoted by negative aggregate backtest evidence.",
+    "last_reviewed": "2026-06-04T09:38:48.383403+00:00"
+  },
+  {
+    "strategy_id": "range_reversion_to_vwap",
+    "desk": "Equities Momentum Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Oversold intraday moves can revert toward VWAP in range-bound names.",
+    "entry_rules": [
+      "Price below VWAP by volatility band",
+      "RSI weakness",
+      "Support confirmation"
+    ],
+    "exit_rules": [
+      "Stop below support",
+      "Target VWAP"
+    ],
+    "risk_rules": [
+      "Research-only; avoid catching strong downtrends"
+    ],
+    "required_data": [
+      "intraday bars",
+      "VWAP",
+      "RSI",
+      "volatility band"
+    ],
+    "promotion_status": "retired",
+    "metrics": {
+      "trades": 525,
+      "win_rate_pct": 53.223,
+      "total_return_pct": -2.274,
+      "profit_factor": 0.839,
+      "max_drawdown_pct": 6.186,
+      "expectancy_pct": 0.0,
+      "evidence_score": 1.603,
+      "source": "results\\company_validation\\2026-06-04\\intraday_strategy_backtest\\strategy_aggregate.csv"
+    },
+    "decision": "blocked",
+    "note": "Demoted by negative aggregate backtest evidence.",
+    "last_reviewed": "2026-06-04T09:38:48.383416+00:00"
+  }
+]

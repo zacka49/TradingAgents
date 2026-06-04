@@ -1,0 +1,255 @@
+[
+  {
+    "strategy_id": "relative_strength_continuation",
+    "desk": "Equities Momentum Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Strong multi-day relative strength can continue when latest-session action is not exhausted.",
+    "entry_rules": [
+      "5D and 20D strength",
+      "No latest-session exhaustion",
+      "Live liquidity confirmation"
+    ],
+    "exit_rules": [
+      "Bracket stop",
+      "Take-profit",
+      "Flatten by day-trader close guard"
+    ],
+    "risk_rules": [
+      "Use selectively",
+      "Require higher confidence",
+      "Avoid crowded sector stacking"
+    ],
+    "required_data": [
+      "daily bars",
+      "intraday confirmation",
+      "quote spread",
+      "volume"
+    ],
+    "promotion_status": "paper_trade_candidate",
+    "metrics": {
+      "trades": 370,
+      "win_rate_pct": 42.508,
+      "total_return_pct": 1.277,
+      "profit_factor": 1.126,
+      "max_drawdown_pct": 4.71,
+      "expectancy_pct": 0.0,
+      "evidence_score": 5.731,
+      "source": "results\\company_validation\\2026-06-04\\intraday_strategy_backtest\\strategy_aggregate.csv"
+    },
+    "decision": "paper_trade_allowed",
+    "note": "Positive but not strong enough for full approved status.",
+    "last_reviewed": "2026-06-04T09:38:48.383374+00:00"
+  },
+  {
+    "strategy_id": "range_reversion_watch",
+    "desk": "Equities Momentum Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Choppy names can revert in range, but need explicit support/resistance and tighter testing.",
+    "entry_rules": [
+      "No autonomous entry"
+    ],
+    "exit_rules": [
+      "Watchlist only"
+    ],
+    "risk_rules": [
+      "Avoid untested range fades"
+    ],
+    "required_data": [
+      "support/resistance",
+      "intraday bars",
+      "quote spread"
+    ],
+    "promotion_status": "paper_watchlist",
+    "metrics": {
+      "trades": 0,
+      "win_rate_pct": 0.0,
+      "total_return_pct": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "expectancy_pct": 0.0,
+      "evidence_score": 0.0,
+      "source": ""
+    },
+    "decision": "watch_only",
+    "note": "Watchlist label, not a tradeable strategy.",
+    "last_reviewed": ""
+  },
+  {
+    "strategy_id": "pullback_watch",
+    "desk": "Equities Momentum Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Strong trends that pull back may become tradable if live reclaim/support confirms.",
+    "entry_rules": [
+      "No autonomous entry until confirmation strategy is promoted"
+    ],
+    "exit_rules": [
+      "Watchlist only"
+    ],
+    "risk_rules": [
+      "Avoid buying weakness without reclaim confirmation"
+    ],
+    "required_data": [
+      "daily bars",
+      "VWAP/support confirmation"
+    ],
+    "promotion_status": "paper_watchlist",
+    "metrics": {
+      "trades": 0,
+      "win_rate_pct": 0.0,
+      "total_return_pct": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "expectancy_pct": 0.0,
+      "evidence_score": 0.0,
+      "source": ""
+    },
+    "decision": "watch_only",
+    "note": "Watchlist label, not a tradeable strategy.",
+    "last_reviewed": ""
+  },
+  {
+    "strategy_id": "general_momentum_watch",
+    "desk": "Equities Momentum Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Generic momentum can be interesting but is too broad for autonomous execution.",
+    "entry_rules": [
+      "No autonomous entry"
+    ],
+    "exit_rules": [
+      "Watchlist only"
+    ],
+    "risk_rules": [
+      "Needs a named promoted setup before trading"
+    ],
+    "required_data": [
+      "daily bars",
+      "live confirmation"
+    ],
+    "promotion_status": "paper_watchlist",
+    "metrics": {
+      "trades": 0,
+      "win_rate_pct": 0.0,
+      "total_return_pct": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "expectancy_pct": 0.0,
+      "evidence_score": 0.0,
+      "source": ""
+    },
+    "decision": "watch_only",
+    "note": "Watchlist label, not a tradeable strategy.",
+    "last_reviewed": ""
+  },
+  {
+    "strategy_id": "fade_or_news_watch",
+    "desk": "News Catalyst And Reversion Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Extended or news-driven moves can reverse, but the edge is specialist and unstable.",
+    "entry_rules": [
+      "No autonomous entry"
+    ],
+    "exit_rules": [
+      "Watchlist only"
+    ],
+    "risk_rules": [
+      "Requires fresh catalyst review and event-study evidence"
+    ],
+    "required_data": [
+      "headline facts",
+      "event bars",
+      "live quote"
+    ],
+    "promotion_status": "paper_watchlist",
+    "metrics": {
+      "trades": 0,
+      "win_rate_pct": 0.0,
+      "total_return_pct": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "expectancy_pct": 0.0,
+      "evidence_score": 0.0,
+      "source": ""
+    },
+    "decision": "watch_only",
+    "note": "Watchlist label, not a tradeable strategy.",
+    "last_reviewed": ""
+  },
+  {
+    "strategy_id": "crypto_momentum",
+    "desk": "Crypto Desk",
+    "asset_class": "crypto",
+    "hypothesis": "Liquid crypto pairs and crypto proxies may trend after momentum confirmation.",
+    "entry_rules": [
+      "Trend confirmation",
+      "Volume/liquidity confirmation",
+      "24/7 risk plan"
+    ],
+    "exit_rules": [
+      "Crypto-specific stop",
+      "24/7 monitoring",
+      "Fee-aware target"
+    ],
+    "risk_rules": [
+      "No autonomous execution until crypto adapter and fee model are approved"
+    ],
+    "required_data": [
+      "crypto bars",
+      "crypto quotes",
+      "fees",
+      "24/7 risk monitor"
+    ],
+    "promotion_status": "research_idea",
+    "metrics": {
+      "trades": 7,
+      "win_rate_pct": 0.0,
+      "total_return_pct": -2.578,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 28.84,
+      "expectancy_pct": 0.0,
+      "evidence_score": 12.415,
+      "source": "results\\company_validation\\2026-06-04\\crypto_proxy_momentum\\crypto_proxy_momentum_smoke.json"
+    },
+    "decision": "research_only",
+    "note": "Crypto evidence is not strong enough and execution support is incomplete.",
+    "last_reviewed": "2026-06-04T09:38:49.003422+00:00"
+  },
+  {
+    "strategy_id": "news_reversion_event_study",
+    "desk": "News Catalyst And Reversion Desk",
+    "asset_class": "us_equity",
+    "hypothesis": "Some news-shock moves revert toward the pre-news close one trading day later.",
+    "entry_rules": [
+      "Dated headline",
+      "Qualified event move",
+      "One-day reversion evidence"
+    ],
+    "exit_rules": [
+      "No autonomous execution",
+      "Paper watch only after promotion"
+    ],
+    "risk_rules": [
+      "Block legal/fraud/halt/dilution/bankruptcy shocks",
+      "Deduplicate same-session headlines"
+    ],
+    "required_data": [
+      "headline timestamp",
+      "previous close",
+      "event close",
+      "next close"
+    ],
+    "promotion_status": "research_idea",
+    "metrics": {
+      "trades": 6,
+      "win_rate_pct": 33.333,
+      "total_return_pct": -2.241,
+      "profit_factor": 0.0,
+      "max_drawdown_pct": 0.0,
+      "expectancy_pct": -2.241,
+      "evidence_score": -1.879,
+      "source": "results\\company_validation\\2026-06-04\\news_reversion\\2026-06-04\\news_reversion_event_study.json"
+    },
+    "decision": "research_only",
+    "note": "Recent event study is negative; keep research-only.",
+    "last_reviewed": "2026-06-04T09:38:48.691849+00:00"
+  }
+]

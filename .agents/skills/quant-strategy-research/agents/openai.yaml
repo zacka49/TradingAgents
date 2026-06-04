@@ -1,0 +1,4 @@
+interface:
+  display_name: "Quant Strategy Research"
+  short_description: "Generate and promote evidence-backed strategies."
+  default_prompt: "Use this skill to generate strategy hypotheses, backtest them, score evidence, and promote or retire strategies before Trading can use them."
