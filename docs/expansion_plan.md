@@ -40,11 +40,11 @@ Implemented sub-teams:
 6. Research Director:
    - CEO-ready synthesis that feeds the bull/bear debate, trader, risk desk, and portfolio manager
 
-Next evaluation steps:
+Current evaluation steps:
 1. Track decision impact via artifact-level A/B cohorts.
 2. Add richer politician data providers if a stable free API is selected.
 3. Use GitHub Researcher findings to prioritize optional OpenBB, vectorized backtest, and monitoring prototypes.
-4. Add strategy backtest scoring so Strategy Researcher ideas can be promoted or retired quantitatively.
+4. Keep strategy backtest scoring current through the Strategy Research Department and generated strategy library.
 
 ## Phase 6: Business Department Expansion (Now Implemented)
 
@@ -69,38 +69,33 @@ Next hardening steps:
 2. Add deterministic policy checks beside each AI memo so hard limits cannot be waived by language.
 3. Store department-level scores in run artifacts for A/B evaluation across model/provider choices.
 
-## Phase 3: Portfolio Construction + Risk Controls
+## Phase 3: Portfolio Construction + Risk Controls (Now Implemented For Paper Mode)
 
 Objective: Move from single-ticker recommendations to portfolio-aware actions.
 
-Deliverables:
-1. Position sizing policy:
-   - Max position %, sector caps, gross/net exposure caps
-2. Risk controls:
-   - Volatility targeting, drawdown guard, liquidity threshold
-3. Execution guardrails:
-   - Block orders when confidence is low or data freshness checks fail
+Implemented:
+1. Position sizing and deploy caps in Codex CEO Company mode and autonomous day-trader profiles.
+2. Centralized multi-desk allocation governance in `tradingagents/company/business_governance.py`.
+3. Strategy promotion gates in `tradingagents/company/strategy_research_department.py`.
+4. Execution guardrails for market-open state, order notional, buying power, duplicate open orders, spread, stale data, confidence, and session loss.
+5. Day-trading close discipline, bracket exits, stale-loser exits, profit protection, and cooldowns.
 
-## Phase 4: Paper Trading Integration
+## Phase 4: Paper Trading Integration (Now Implemented For Alpaca Paper)
 
 Objective: Route approved decisions to a paper brokerage account.
 
-Current groundwork:
-- Added execution interface in:
-  - `tradingagents/execution/paper_broker.py`
+Implemented:
+1. `PaperBroker` interface and `AlpacaPaperBroker` adapter.
+2. `OrderIntent` planning and policy checks.
+3. Codex CEO dry-run and guarded paper submission paths.
+4. Autonomous paper day-trader loop with safe/risky profiles.
+5. Broker responses, order diagnostics, session logs, and briefing artifacts.
 
-Next implementation steps:
-1. Add `AlpacaPaperBroker` (or chosen broker) adapter implementing `PaperBroker`.
-2. Parse portfolio decisions into `OrderIntent`.
-3. Add pre-trade validation:
-   - ticker tradability
-   - buying power
-   - market session/open checks
-4. Submit order + persist broker response into run artifacts.
-5. Add daily reconciliation job:
-   - broker fills
-   - PnL snapshots
-   - realized vs unrealized performance
+Remaining hardening:
+1. Add deeper P&L attribution by desk, strategy ID, ticker, risk flag, and blocker reason.
+2. Add a dedicated crypto adapter before crypto strategies can leave research-only status.
+3. Add a dedicated forex broker/data adapter before direct FX execution can be considered.
+4. Add walk-forward/out-of-sample strategy promotion jobs before increasing paper allocation.
 
 ## Phase 5: Evaluation Framework
 
@@ -122,8 +117,8 @@ Protocol:
 
 ## Suggested Build Order
 
-1. Macro research team
-2. Order intent parser from portfolio decision
-3. Single broker paper adapter
-4. Position sizing/risk policy layer
-5. A/B evaluation runner
+1. P&L attribution by desk and strategy.
+2. Walk-forward strategy research jobs.
+3. Crypto paper adapter and 24/7 risk policy.
+4. Control room monitoring hardening.
+5. A/B evaluation runner across promoted strategies.

@@ -29,7 +29,7 @@ $env:TRADINGAGENTS_ALLOW_ONLINE_LLM = "1"
 $env:TRADINGAGENTS_LLM_BUDGET_MODE = "allow_online"
 ```
 
-See [local_first_compute_policy.md](/D:/AI%20projects/Git%20repo%20for%20inspection/TradingAgents/docs/local_first_compute_policy.md)
+See [local_first_compute_policy.md](local_first_compute_policy.md)
 for the guardrails and model priority ladder.
 
 Reference model sizes and capabilities:
@@ -38,7 +38,8 @@ Reference model sizes and capabilities:
 
 ## 2) TradingAgents local config
 
-Use [local_ollama_config.example.py](/D:/AI%20projects/Git%20repo%20for%20inspection/TradingAgents/configs/local_ollama_config.example.py) as your template.
+Use [local_ollama_config.example.py](../configs/local_ollama_config.example.py)
+as your template.
 
 Key settings:
 - `llm_provider = "ollama"`
@@ -69,15 +70,19 @@ Add to your local secrets file (not committed):
 
 ## 4) Repo scaffolding added for paper integration
 
-Added interfaces and starter adapter:
-- [paper_broker.py](/D:/AI%20projects/Git%20repo%20for%20inspection/TradingAgents/tradingagents/execution/paper_broker.py)
-- [alpaca_paper.py](/D:/AI%20projects/Git%20repo%20for%20inspection/TradingAgents/tradingagents/execution/alpaca_paper.py)
-- [decision_to_order.py](/D:/AI%20projects/Git%20repo%20for%20inspection/TradingAgents/tradingagents/execution/decision_to_order.py)
+Current interfaces and paper adapter:
+- [paper_broker.py](../tradingagents/execution/paper_broker.py)
+- [alpaca_paper.py](../tradingagents/execution/alpaca_paper.py)
+- [decision_to_order.py](../tradingagents/execution/decision_to_order.py)
 
 What this gives you now:
 - Unified `PaperBroker` interface
 - `AlpacaPaperBroker` with `submit_order`, `get_positions`, `get_account`
 - Initial decision-to-order mapper from final rating text
+- Codex CEO Company runner with guarded Alpaca paper order planning
+- Autonomous paper day-trader loop with market-clock, order-size, session-risk,
+  close-flattening, and strategy-promotion gates
+- Strategy Research Department library gating autonomous allocations
 
 ## 5) Before first live paper run checklist
 
@@ -85,13 +90,39 @@ What this gives you now:
 2. Keep `.env.example` with blanks only.
 3. Ensure enough disk space in `C:\Users\Zacka\.ollama\models` for chosen model.
 4. Choose a model your RAM/VRAM can load.
-5. Start with tiny position size and one ticker.
-6. Review order payload logs before enabling automatic order submission.
+5. Run the full test suite after code changes.
+6. Refresh `knowledge/strategy_library/` before an autonomous market session.
+7. Start with low deploy caps and paper-only mode.
+8. Review order payload logs before enabling automatic order submission.
 
-## 6) Next implementation step (when you say go)
+## 6) Business Operating Commands
 
-Wire the graph output to paper execution:
-1. Parse `final_trade_decision` into `OrderIntent`
-2. Add risk guard checks (market open, position caps, buying power)
-3. Submit through `AlpacaPaperBroker`
-4. Save broker request/response under per-run artifact folder
+Refresh strategy research:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_strategy_research_department.py `
+  --evidence-root results `
+  --output-dir knowledge/strategy_library
+```
+
+Run a non-submitting CEO dry run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_codex_ceo_company.py `
+  --results-dir results `
+  --no-ollama-staff
+```
+
+Run the autonomous paper day trader:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_autonomous_day_trader.py `
+  --strategy both `
+  --run-until-close `
+  --interval-seconds 30 `
+  --position-monitor-seconds 5 `
+  --results-dir results/autonomous_day_trader
+```
+
+The system remains paper-only unless live trading is explicitly approved as a
+separate project.

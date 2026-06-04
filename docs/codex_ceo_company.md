@@ -9,9 +9,12 @@ The workflow is intentionally smaller than the full single-ticker LangGraph:
    and volatility rules.
 2. Build a top-10 research watchlist.
 3. Run a lightweight Backtrader momentum smoke test over each candidate.
-4. Produce a starter portfolio target and proposed Alpaca paper orders.
-5. Write a `ceo_briefing_pack.md` for Codex/user review.
-6. Submit paper orders only when the market is open and CEO approval is present.
+4. Read the Strategy Research Department library and block unpromoted strategy
+   IDs from autonomous target weights.
+5. Produce a starter portfolio target and proposed Alpaca paper orders.
+6. Write a `ceo_briefing_pack.md` for Codex/user review.
+7. Submit paper orders only when the market is open and CEO approval or
+   autonomous paper mode is present.
 
 Run a dry run:
 
@@ -40,7 +43,17 @@ Run autonomous paper submission without the CEO approval gate:
 
 Autonomous mode is still paper-only and still enforces the market-open gate,
 order-notional cap, deploy cap, liquidity filter, and strategy-confidence
-filter.
+filter. It also enforces the Strategy Research Department gate: a candidate
+must map to `paper_trade_candidate` or `approved_paper_strategy` before the
+Portfolio Office can allocate to it.
+
+Refresh the quant strategy library before an operating session:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_strategy_research_department.py `
+  --evidence-root results `
+  --output-dir knowledge/strategy_library
+```
 
 Run the full market-hours autonomous loop with both day-trading profiles:
 

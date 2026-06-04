@@ -9,43 +9,49 @@ correlated exposure across desks.
 
 ```text
 Owner / Human CEO
-└── Codex CEO Runner
-    ├── Data Quality And Strategy Governance
-    │   ├── Data Quality Officer
-    │   ├── Experiment / Backtest Auditor
-    │   ├── Strategy Promotion Committee
-    │   └── P&L Attribution Analyst
-    │
-    ├── Equities Momentum Desk
-    │   ├── Momentum Breakout
-    │   ├── Relative Strength Continuation
-    │   └── Opening Range Breakout
-    │
-    ├── News Catalyst And Reversion Desk
-    │   ├── Current News Scout
-    │   ├── News Reversion Event Study
-    │   └── Catalyst Risk Review
-    │
-    ├── Crypto Desk
-    │   ├── Crypto Momentum Research
-    │   ├── Crypto Range Reversion Research
-    │   └── Crypto News Catalyst Research
-    │
-    ├── Macro ETF Desk
-    │   ├── Rates / Inflation
-    │   ├── Risk-On / Risk-Off
-    │   └── Geopolitics / Commodities Proxy
-    │
-    ├── Forex Research Desk
-    │   ├── USD / Rates Context
-    │   ├── FX Macro Research
-    │   └── Currency Risk Notes
-    │
-    └── Central Portfolio And Execution
-        ├── Portfolio Office Allocator
-        ├── Risk Office Guardian
-        ├── Operations Compliance Auditor
-        └── Alpaca Paper Execution Controller
+`-- Codex CEO Runner
+    |-- Data Quality And Strategy Governance
+    |   |-- Data Quality Officer
+    |   |-- Experiment / Backtest Auditor
+    |   |-- Strategy Promotion Committee
+    |   `-- P&L Attribution Analyst
+    |
+    |-- Strategy Research Department
+    |   |-- Strategy Idea Generator
+    |   |-- Backtest Lab
+    |   |-- Event Study Lab
+    |   `-- Strategy Library Maintainer
+    |
+    |-- Equities Momentum Desk
+    |   |-- Momentum Breakout
+    |   |-- Relative Strength Continuation
+    |   `-- Opening Range Breakout
+    |
+    |-- News Catalyst And Reversion Desk
+    |   |-- Current News Scout
+    |   |-- News Reversion Event Study
+    |   `-- Catalyst Risk Review
+    |
+    |-- Crypto Desk
+    |   |-- Crypto Momentum Research
+    |   |-- Crypto Range Reversion Research
+    |   `-- Crypto News Catalyst Research
+    |
+    |-- Macro ETF Desk
+    |   |-- Rates / Inflation
+    |   |-- Risk-On / Risk-Off
+    |   `-- Geopolitics / Commodities Proxy
+    |
+    |-- Forex Research Desk
+    |   |-- USD / Rates Context
+    |   |-- FX Macro Research
+    |   `-- Currency Risk Notes
+    |
+    `-- Central Portfolio And Execution
+        |-- Portfolio Office Allocator
+        |-- Risk Office Guardian
+        |-- Operations Compliance Auditor
+        `-- Alpaca Paper Execution Controller
 ```
 
 ## Operating Rule
@@ -54,16 +60,22 @@ Each desk can research, rank, and explain. Only the central execution
 controller can submit paper orders. A desk must pass the Data Quality And
 Strategy Governance gate before it can move from research to paper trading.
 
+The Strategy Research Department is the quant gate between desk research and
+trading. It promotes strategies through evidence stages, and the CEO runner can
+only allocate to strategies promoted to `paper_trade_candidate` or
+`approved_paper_strategy`.
+
 ## Current Execution Readiness
 
 | Desk | Status | Execution |
 | --- | --- | --- |
-| Equities Momentum Desk | Paper trading enabled | Alpaca paper controller |
-| Macro ETF Desk | Paper watchlist | Alpaca paper controller |
+| Equities Momentum Desk | Paper trading enabled for promoted strategies | Alpaca paper controller |
+| Macro ETF Desk | Paper watchlist | Alpaca paper controller after strategy promotion |
 | News Catalyst And Reversion Desk | Research and paper watchlist | Research only by default |
-| Crypto Desk | Research first | Needs crypto-specific adapter and risk gates |
+| Crypto Desk | Research first | Needs crypto-specific adapter and 24/7 risk gates |
 | Forex Research Desk | Research only | Not supported by current execution stack |
 | Data Quality And Strategy Governance | Required gate | No order authority |
+| Strategy Research Department | Required promotion gate | No order authority |
 
 ## Is This A Good Idea?
 
@@ -116,6 +128,14 @@ The durable desk model lives in:
 It defines the default desks, allocation caps, execution authority, and
 evidence requirements. The model intentionally keeps crypto and forex from
 accidentally using the existing equity execution path.
+
+The strategy promotion engine lives in:
+
+`tradingagents/company/strategy_research_department.py`
+
+The generated strategy library lives in:
+
+`knowledge/strategy_library/`
 
 ## Current Source Notes
 

@@ -5,6 +5,14 @@ This runner is paper-only. The self-running CEO agent in
 per-trade approval, but it still enforces the Alpaca market clock, order caps,
 buying power, duplicate-open-order suppression, and bracket exits.
 
+Autonomous trading also goes through the Strategy Research Department gate.
+The runner may research many desks and symbols, but it can only allocate to
+strategies promoted to `paper_trade_candidate` or `approved_paper_strategy`.
+The current promoted equity strategies are `opening_range_breakout_15m`,
+`momentum_breakout`, and `relative_strength_continuation` as a paper candidate.
+News reversion, crypto, and forex stay research-only unless the strategy
+library and execution adapters are upgraded.
+
 By default it now behaves as a strict day trader: it stops opening new positions
 15 minutes before the close, cancels working orders, and asks Alpaca to flatten
 the paper account 5 minutes before the close. Disable this only for an explicit
@@ -63,6 +71,14 @@ Equivalent CEO entrypoint:
 ```
 
 ## Run During The Open Session
+
+Refresh the strategy library first:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_strategy_research_department.py `
+  --evidence-root results `
+  --output-dir knowledge/strategy_library
+```
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_autonomous_day_trader.py `

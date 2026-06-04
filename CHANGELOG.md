@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [Unreleased] - 2026-06-04
+
+### Added
+
+- **Autonomous AI trading business operating model.** Added multi-desk business
+  governance for Equities Momentum, News Catalyst And Reversion, Crypto, Macro
+  ETF, Forex Research, Data Quality, Portfolio/Risk, Operations, and centralized
+  Alpaca paper execution.
+- **Strategy Research Department.** Added a quant research function that
+  generates, scores, promotes, demotes, and retires strategies before the
+  trading workflow can allocate capital.
+- **Generated strategy library.** Added `knowledge/strategy_library/` artifacts
+  for approved paper strategies, research ideas, retired strategies, and the
+  CEO-consumed strategy research report.
+- **News Reversion Desk.** Added an event-study workflow for price-before-news,
+  price-after-news, and one-day-after-news reversion testing.
+- **Agent skill matrix.** Added durable AI agent role/skill assignments and
+  renderer support for the full business training plan.
+- **Autonomous day-trader controls.** Added broader catalyst discovery,
+  pre-market research, live position monitoring, session risk logs, stale-loser
+  exits, cooldowns, and close discipline.
+- **Control room and preflight utilities.** Added scripts for strategy
+  evidence generation, market-open preflight checks, model benchmarking, and a
+  local control room app.
+
+### Changed
+
+- Codex CEO Company mode now consults the Strategy Research Department report
+  and only allows autonomous paper target weights from strategies promoted to
+  `paper_trade_candidate` or `approved_paper_strategy`.
+- Documentation now describes the project as a paper-only AI trading business,
+  not just a single-ticker multi-agent analysis framework.
+
+### Verified
+
+- Full project test suite passed on 2026-06-04: `210 passed`.
+
 ## [0.2.4] — 2026-04-25
 
 ### Added

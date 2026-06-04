@@ -28,6 +28,7 @@
 # TradingAgents: Multi-Agents LLM Financial Trading Framework
 
 ## News
+- [2026-06] **Autonomous AI trading business update** added a multi-desk paper-trading operating model, Strategy Research Department, News Reversion Desk, generated strategy library, agent skill matrix, centralized portfolio/execution governance, and stronger autonomous day-trader controls. See [docs/README.md](docs/README.md) for the new business map.
 - [2026-04] **TradingAgents v0.2.4** released with structured-output agents (Research Manager, Trader, Portfolio Manager), LangGraph checkpoint resume, persistent decision log, DeepSeek/Qwen/GLM/Azure provider support, Docker, and a Windows UTF-8 encoding fix. See [CHANGELOG.md](CHANGELOG.md) for the full list.
 - [2026-03] **TradingAgents v0.2.3** released with multi-language support, GPT-5.4 family models, unified model catalog, backtesting date fidelity, and proxy support.
 - [2026-03] **TradingAgents v0.2.2** released with GPT-5.4/Gemini 3.1/Claude 4.6 model coverage, five-tier rating scale, OpenAI Responses API, Anthropic effort control, and cross-platform stability.
@@ -56,7 +57,9 @@
 
 ## TradingAgents Framework
 
-TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents: from fundamental analysts, sentiment experts, and technical analysts, to trader, risk management team, the platform collaboratively evaluates market conditions and informs trading decisions. Moreover, these agents engage in dynamic discussions to pinpoint the optimal strategy.
+TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. This fork now also operates as a paper-only AI trading business: specialist desks research opportunities, a Strategy Research Department promotes or blocks strategies, a central Portfolio Office allocates risk, and one guarded Alpaca paper execution controller handles orders.
+
+The business is designed to make its own day-to-day decisions inside explicit guardrails. Research agents can discover stocks, news themes, crypto or forex ideas, and strategy hypotheses, but autonomous paper trading is only allowed when the strategy has been promoted to `paper_trade_candidate` or `approved_paper_strategy`.
 
 <p align="center">
   <img src="assets/schema.png" style="width: 100%; height: auto;">
@@ -65,6 +68,40 @@ TradingAgents is a multi-agent trading framework that mirrors the dynamics of re
 > TradingAgents framework is designed for research purposes. Trading performance may vary based on many factors, including the chosen backbone language models, model temperature, trading periods, the quality of data, and other non-deterministic factors. [It is not intended as financial, investment, or trading advice.](https://tauric.ai/disclaimer/)
 
 Our framework decomposes complex trading tasks into specialized roles. This ensures the system achieves a robust, scalable approach to market analysis and decision-making.
+
+### AI Trading Business Overview
+
+The current operating model is:
+
+```text
+Research desks -> Strategy Research Department -> Portfolio/Risk Office -> Alpaca paper execution
+```
+
+Core business departments:
+
+- **Equities Momentum Desk:** trades promoted equity momentum strategies in paper mode.
+- **News Catalyst And Reversion Desk:** studies news shocks, reversion, and catalyst risk; research-only by default until evidence improves.
+- **Crypto Desk:** researches crypto and crypto-linked assets; no autonomous execution until a crypto adapter and 24/7 risk policy are approved.
+- **Macro ETF Desk:** studies rates, inflation, risk-on/risk-off, commodities, and ETF proxies.
+- **Forex Research Desk:** researches USD/rates/currency context; direct forex execution is out of scope for the current equity paper broker.
+- **Strategy Research Department:** generates, backtests, scores, promotes, demotes, and retires strategy ideas.
+- **Data Quality And Strategy Governance:** checks samples, leakage, slippage, data freshness, and promotion status.
+- **Central Portfolio And Execution:** owns allocation, risk caps, duplicate-order prevention, and Alpaca paper orders.
+
+Current strategy library decisions:
+
+- `opening_range_breakout_15m`: approved paper strategy.
+- `momentum_breakout`: approved paper strategy.
+- `relative_strength_continuation`: paper trade candidate.
+- `news_reversion_event_study`, `crypto_momentum`, `vwap_reclaim`, and `range_reversion_to_vwap`: research-only, watchlist, or retired until evidence improves.
+
+Start here for the updated business documentation:
+
+- [docs/README.md](docs/README.md) - documentation index and operating map.
+- [docs/multi_desk_business_model.md](docs/multi_desk_business_model.md) - full organagram, desks, allocation caps, and execution readiness.
+- [docs/strategy_research_department.md](docs/strategy_research_department.md) - quant research workflow and strategy promotion rules.
+- [knowledge/strategy_library/strategy_research_report.md](knowledge/strategy_library/strategy_research_report.md) - generated strategy library used by the CEO runner.
+- [docs/agent_skill_training_matrix.md](docs/agent_skill_training_matrix.md) - AI agent roles, skills, drills, and success criteria.
 
 ### Analyst Team
 - Fundamentals Analyst: Evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
@@ -96,6 +133,7 @@ See [docs/research_department.md](docs/research_department.md) for the recommend
 ### Codex CEO Company Mode
 - Codex CEO mode is the compute-light daily operating layer: deterministic market screening, one optional local Ollama staff memo, a `ceo_briefing_pack.md`, and guarded Alpaca paper-order planning.
 - It defaults to local-only Ollama compute. Hosted LLM providers and Ollama `:cloud` models are blocked unless explicitly opted in, so repeated business runs do not quietly burn hosted token quota.
+- It reads the generated strategy library and blocks autonomous target weights when a candidate's strategy is only research/watchlist/retired.
 - A lightweight Backtest Lab uses Backtrader over already-loaded daily bars to sanity-check momentum candidates before target weights are selected.
 - Each run can also include a Technology Scout report that tracks useful external systems such as TradingAgents upstream, FinRobot, FinGPT, LEAN, Backtrader, OpenBB, LangGraph, and OpenAI Agents/Responses.
 
@@ -104,6 +142,12 @@ See [docs/research_department.md](docs/research_department.md) for the recommend
 ```
 
 See [docs/codex_ceo_company.md](docs/codex_ceo_company.md) for autonomous paper submission, technology scouting, day-trading strategy rules, and efficiency controls. See [docs/local_first_compute_policy.md](docs/local_first_compute_policy.md) for the local-first LLM guardrails and [docs/agent_learning_loop.md](docs/agent_learning_loop.md) for post-market scorecards and specialist memory.
+
+Refresh the Strategy Research Department library:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_strategy_research_department.py --evidence-root results --output-dir knowledge/strategy_library
+```
 
 ### Trader Agent
 - Composes reports from the analysts and researchers to make informed trading decisions. It determines the timing and magnitude of trades based on comprehensive market insights.

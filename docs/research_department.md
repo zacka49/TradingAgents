@@ -3,6 +3,18 @@
 This project now runs a full AI research department between the core analyst team and the bull/bear debate.
 The rest of the business is also expanded into downstream AI departments: Investment Committee, Trading Desk, Risk Office, Portfolio Office, Operations/Compliance, Evaluation, and Training/Development.
 
+The research department is now part of a wider paper-only AI trading business.
+Specialist research desks can generate opportunities and hypotheses, but they
+do not own order authority. Strategy promotion, portfolio allocation, and paper
+execution are separate functions.
+
+Related operating docs:
+
+- [docs/multi_desk_business_model.md](multi_desk_business_model.md)
+- [docs/strategy_research_department.md](strategy_research_department.md)
+- [docs/news_reversion_desk.md](news_reversion_desk.md)
+- [docs/agent_skill_training_matrix.md](agent_skill_training_matrix.md)
+
 ## Department Roles
 
 | Agent | Job | Main outputs |
@@ -15,6 +27,18 @@ The rest of the business is also expanded into downstream AI departments: Invest
 | GitHub Researcher | Monitors popular financial AI, trading, data, agent, and backtesting repositories. | Repo lessons, adoption status, license caution, and next implementation step. |
 | Research Director | Synthesizes the specialist memos into a CEO-ready brief. | Highest-value signals, conflicts, limitations, and debate questions for bull/bear researchers. |
 | Training and Development Coach | Runs after Evaluation and upskills every active AI role based on the run outputs. | Role-specific lessons, drills, data/tool skills, improvement rubric, and next-run coaching instructions. |
+
+## Research Versus Trading Authority
+
+- Research desks can discover, rank, explain, and recommend.
+- The Strategy Research Department decides whether a strategy is a
+  `research_idea`, `paper_watchlist`, `paper_trade_candidate`,
+  `approved_paper_strategy`, or `retired`.
+- The Portfolio Office decides whether promoted strategies fit current capital
+  and correlation limits.
+- The Alpaca paper execution controller is the only order-submission path.
+- Crypto and forex remain research-only until dedicated adapters and risk
+  policies exist.
 
 The durable agent skill matrix lives in
 `tradingagents/company/agent_skill_registry.py` and can be rendered to
