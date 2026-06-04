@@ -71,6 +71,29 @@ def test_build_agent_scorecards_covers_specialist_roles():
 
 
 @pytest.mark.unit
+def test_ceo_scorecard_accepts_explicit_no_trade_decision():
+    payload = _payload()
+    payload["ceo_approved"] = True
+    payload["order_plans"] = []
+    payload["order_plan_diagnostics"] = [
+        {"ticker": "GS", "reason": "whole_share_bracket_requires_one_share"}
+    ]
+    payload["ceo_decision_summary"] = {
+        "decision": "no_trade",
+        "outcome": "No executable paper orders were produced.",
+        "reasons": ["whole_share_bracket_requires_one_share"],
+        "next_actions": ["Inspect order sizing caps."],
+    }
+
+    ceo_card = next(
+        card for card in build_agent_scorecards(payload) if card.agent == "CEO Agent"
+    )
+
+    assert "Submission request resolved by explicit no-trade decision" in ceo_card.signals
+    assert "Submission requested but no order outcome was recorded" not in ceo_card.gaps
+
+
+@pytest.mark.unit
 def test_write_post_market_review_updates_specialist_memory(tmp_path):
     run_dir = tmp_path / "results" / "codex_ceo_company" / "2026-05-11" / "run_1"
     run_dir.mkdir(parents=True)

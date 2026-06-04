@@ -250,9 +250,20 @@ class AppState:
     bot_process: subprocess.Popen[Any] | None = None
     bot_started_at: str = ""
     bot_command: list[str] | None = None
+    research_process: subprocess.Popen[Any] | None = None
+    research_started_at: str = ""
+    research_command: list[str] | None = None
 
 
 APP_STATE = AppState()
+
+
+DEFAULT_PROJECTG_UNIVERSE = ",".join(
+    [
+        *UNIVERSE_GROUPS["equity_core"]["symbols"],
+        *UNIVERSE_GROUPS["crypto_linked_tradeable"]["symbols"],
+    ]
+)
 
 
 HTML = r"""<!doctype html>
@@ -260,7 +271,7 @@ HTML = r"""<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Trading Control Room</title>
+  <title>ProjectG Quant Control Room</title>
   <style>
     :root {
       color-scheme: light;
@@ -494,6 +505,77 @@ HTML = r"""<!doctype html>
       width: 100%;
       height: auto;
     }
+    .control-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 16px;
+    }
+    .run-form {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    .run-form .full { grid-column: 1 / -1; }
+    .toggle-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .toggle {
+      display: inline-flex;
+      gap: 7px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 10px;
+      background: #ffffff;
+      color: #314055;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .toggle input {
+      width: auto;
+      min-height: 0;
+      margin: 0;
+    }
+    .allocation-list {
+      display: grid;
+      gap: 10px;
+    }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr) 62px;
+      gap: 10px;
+      align-items: center;
+    }
+    .bar-shell {
+      min-width: 0;
+      height: 12px;
+      border: 1px solid #c8d3df;
+      border-radius: 999px;
+      background: #eef2f7;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #176b87, #0b744f);
+    }
+    .sparkline {
+      width: 100%;
+      min-height: 120px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 8px;
+    }
+    .sparkline svg {
+      width: 100%;
+      height: 118px;
+      display: block;
+    }
     .org-map {
       display: grid;
       grid-template-columns: repeat(5, minmax(170px, 1fr));
@@ -648,7 +730,8 @@ HTML = r"""<!doctype html>
     @media (max-width: 1220px) {
       .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .learn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .two, .three, .wide-left, .chart-grid, .universe-grid { grid-template-columns: 1fr; }
+      .two, .three, .wide-left, .chart-grid, .universe-grid, .control-grid { grid-template-columns: 1fr; }
+      .run-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .org-map { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .org-node::after { content: ""; }
       .event { grid-template-columns: 150px minmax(0, 1fr); }
@@ -660,6 +743,7 @@ HTML = r"""<!doctype html>
       nav { justify-content: flex-start; }
       main { padding: 12px; }
       .metrics, .learn-grid { grid-template-columns: 1fr; }
+      .run-form { grid-template-columns: 1fr; }
       .org-map { grid-template-columns: 1fr; }
       .event { grid-template-columns: 1fr; }
       .toolbar { align-items: stretch; }
@@ -671,8 +755,8 @@ HTML = r"""<!doctype html>
   <header>
     <div class="head-inner">
       <div>
-        <h1>Trading Control Room</h1>
-        <div class="subhead">Paper account operations, learning, reports, and agent department workbench</div>
+        <h1>ProjectG Quant Control Room</h1>
+        <div class="subhead">Visual paper-account cockpit for research, allocation, execution, review, and learning</div>
       </div>
       <nav>
         <button id="refreshBtn" class="primary">Refresh</button>
@@ -685,14 +769,113 @@ HTML = r"""<!doctype html>
   </header>
   <main>
     <div class="tabs">
-      <button class="tab active" data-view="dashboard">Dashboard</button>
+      <button class="tab active" data-view="run">Run ProjectG</button>
+      <button class="tab" data-view="dashboard">Dashboard</button>
       <button class="tab" data-view="strategy">Strategy Lab</button>
       <button class="tab" data-view="departments">Departments</button>
       <button class="tab" data-view="learning">Learning</button>
       <button class="tab" data-view="reports">Reports</button>
     </div>
 
-    <div id="dashboard" class="view active">
+    <div id="run" class="view active">
+      <div id="projectgNotice"></div>
+      <div class="grid metrics">
+        <section class="metric"><div class="label">Paper Wealth</div><div id="pgEquityValue" class="value">...</div><div id="pgEquitySub" class="sub"></div></section>
+        <section class="metric"><div class="label">Daily P/L</div><div id="pgDailyValue" class="value">...</div><div id="pgDailySub" class="sub"></div></section>
+        <section class="metric"><div class="label">CEO Decision</div><div id="pgDecisionValue" class="value">...</div><div id="pgDecisionSub" class="sub"></div></section>
+        <section class="metric"><div class="label">Research Job</div><div id="pgResearchValue" class="value">...</div><div id="pgResearchSub" class="sub"></div></section>
+        <section class="metric"><div class="label">Execution Bot</div><div id="pgBotValue" class="value">...</div><div id="pgBotSub" class="sub"></div></section>
+      </div>
+      <div class="control-grid">
+        <section>
+          <div class="section-head">
+            <h2>ProjectG Run Cockpit</h2>
+            <span class="pill warn">Alpaca paper only</span>
+          </div>
+          <div class="body">
+            <div class="run-form">
+              <label>Bot strategy
+                <select id="pgBotStrategy">
+                  <option value="both">Safe + risky</option>
+                  <option value="safe">Safe only</option>
+                  <option value="risky">Risky only</option>
+                </select>
+              </label>
+              <label>CEO research profile
+                <select id="pgResearchProfile">
+                  <option value="safe">Safe</option>
+                  <option value="risky">Risky</option>
+                  <option value="balanced">Balanced</option>
+                </select>
+              </label>
+              <label>Interval seconds<input id="pgInterval" type="number" min="5" step="5" value="30"></label>
+              <label>Max cycles<input id="pgMaxCycles" type="number" min="0" step="1" value="0"></label>
+              <label>Max deploy $<input id="pgMaxDeploy" type="number" min="0" step="100" placeholder="profile default"></label>
+              <label>Max order $<input id="pgMaxOrder" type="number" min="0" step="100" placeholder="profile default"></label>
+              <label>Target positions<input id="pgTargets" type="number" min="1" step="1" placeholder="profile default"></label>
+              <label>Alpaca feed
+                <select id="pgFeed">
+                  <option value="">Default</option>
+                  <option value="iex">IEX</option>
+                  <option value="sip">SIP</option>
+                  <option value="delayed_sip">Delayed SIP</option>
+                  <option value="overnight">Overnight</option>
+                  <option value="otc">OTC</option>
+                </select>
+              </label>
+              <label class="full">Universe<textarea id="pgUniverse"></textarea></label>
+            </div>
+            <div class="toggle-row">
+              <label class="toggle"><input id="pgNews" type="checkbox" checked> News scan</label>
+              <label class="toggle"><input id="pgPremarket" type="checkbox" checked> Premarket research</label>
+              <label class="toggle"><input id="pgStaffMemo" type="checkbox"> Staff memo</label>
+              <label class="toggle"><input id="pgTechScout" type="checkbox"> Tech scout</label>
+            </div>
+            <div style="height:12px"></div>
+            <div class="toolbar">
+              <button id="pgPreflightBtn">Preflight</button>
+              <button id="pgResearchBtn" class="primary">Run CEO Research</button>
+              <button id="pgEvidenceBtn">Generate Evidence</button>
+              <button id="pgStartBtn" class="good">Start Paper Bot</button>
+              <button id="pgOnceBtn">One Cycle</button>
+              <button id="pgFlattenStartBtn" class="warn">Start + Flatten</button>
+              <button id="pgStopFlattenBtn" class="bad">Stop + Flatten</button>
+            </div>
+            <div id="projectgActionResult" class="sub"></div>
+          </div>
+        </section>
+        <section>
+          <div class="section-head"><h2>Paper Account Curve</h2><span id="pgCurvePill" class="pill">...</span></div>
+          <div class="body">
+            <div id="pgSparkline" class="sparkline"></div>
+            <div style="height:12px"></div>
+            <div id="pgSessionTable"></div>
+          </div>
+        </section>
+      </div>
+      <div class="grid two">
+        <section>
+          <div class="section-head"><h2>Latest CEO Research Decision</h2><span id="pgDecisionPill" class="pill">...</span></div>
+          <div id="pgDecisionSummary" class="body"></div>
+        </section>
+        <section>
+          <div class="section-head"><h2>Capital Allocation</h2><span id="pgAllocationPill" class="pill">...</span></div>
+          <div id="pgAllocation" class="body"></div>
+        </section>
+      </div>
+      <div class="grid two">
+        <section>
+          <div class="section-head"><h2>Top Candidates</h2><span class="pill">Research ranking</span></div>
+          <div id="pgCandidates"></div>
+        </section>
+        <section>
+          <div class="section-head"><h2>Recent Activity</h2><span class="pill">Live log</span></div>
+          <div id="pgActivity" class="events"></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="dashboard" class="view">
       <div id="topNotice"></div>
       <div class="grid metrics">
         <section class="metric"><div class="label">Startup Gate</div><div id="gateValue" class="value">...</div><div id="gateSub" class="sub"></div></section>
@@ -972,6 +1155,7 @@ HTML = r"""<!doctype html>
       renderStrategy(data.strategy || {});
       renderReports(data.reports || []);
       renderTaskHistory(data.department_tasks || []);
+      renderProjectG(data.projectg || {}, data);
     }
 
     function renderSafety(data) {
@@ -996,6 +1180,138 @@ HTML = r"""<!doctype html>
     function renderCounters(counts) {
       const rows = Object.entries(counts).sort((a,b) => b[1] - a[1]).slice(0, 18).map(([event, count]) => ({event, count}));
       $("counters").innerHTML = table([{key:"event", label:"Event"}, {key:"count", label:"Count", num:true}], rows, "No counters.");
+    }
+
+    function renderProjectG(projectg, fullStatus) {
+      const account = (fullStatus.alpaca || {}).account || {};
+      const equity = Number(account.equity || account.portfolio_value || 0);
+      const lastEquity = Number(account.last_equity || 0);
+      const daily = lastEquity ? equity - lastEquity : Number(projectg.latest_session_change || 0);
+      const decision = projectg.latest_company_run ? (projectg.latest_company_run.ceo_decision_summary || {}) : {};
+      const research = projectg.research_process || {};
+      const bot = fullStatus.bot || {};
+
+      setMetric("pgEquity", equity ? money(equity) : "Unknown", "Current Alpaca paper equity");
+      setMetric("pgDaily", money(daily), lastEquity ? "Versus Alpaca last equity" : "Latest report change");
+      $("pgDailyValue").className = "value " + (daily >= 0 ? "ok" : "bad-text");
+      setMetric("pgDecision", decision.decision || "No run", decision.outcome || "Run CEO Research to refresh");
+      setMetric("pgResearch", research.running ? "Running" : (research.exit_code === 0 ? "Done" : "Idle"), research.detail || "");
+      setMetric("pgBot", bot.running ? "Running" : "Stopped", bot.detail || "");
+
+      const positions = (fullStatus.alpaca || {}).positions || [];
+      const orders = (fullStatus.alpaca || {}).open_orders || [];
+      const flat = positions.length === 0 && orders.length === 0;
+      $("projectgNotice").innerHTML = flat
+        ? `<div class="notice">ProjectG sees a flat paper account. You can run research, preflight, then start the paper bot from this page.</div>`
+        : `<div class="notice bad">ProjectG sees existing exposure: ${positions.length} position(s), ${orders.length} order(s). Use Start + Flatten or review before allowing carry risk.</div>`;
+
+      renderProjectGDecision(decision);
+      renderProjectGAllocation(projectg.latest_company_run || {});
+      renderProjectGCandidates(projectg.latest_company_run || {});
+      renderProjectGSessions(projectg.sessions || []);
+      renderProjectGActivity((fullStatus.log || {}).events || []);
+    }
+
+    function renderProjectGDecision(decision) {
+      const reasons = decision.reasons || [];
+      const actions = decision.next_actions || [];
+      $("pgDecisionPill").textContent = decision.decision || "No decision";
+      $("pgDecisionPill").className = decision.decision === "trade" ? "pill good" : decision.decision === "no_trade" ? "pill warn" : "pill";
+      $("pgDecisionSummary").innerHTML = `
+        <table><tbody>
+          <tr><td><strong>Decision</strong></td><td>${safe(decision.decision || "No CEO research run found")}</td></tr>
+          <tr><td><strong>Outcome</strong></td><td>${safe(decision.outcome || "Run CEO Research to create a fresh decision")}</td></tr>
+          <tr><td><strong>Reasons</strong></td><td>${safe(reasons.join(", ") || "none")}</td></tr>
+          <tr><td><strong>Next actions</strong></td><td>${safe(actions.join("; ") || "none")}</td></tr>
+        </tbody></table>`;
+    }
+
+    function renderProjectGAllocation(companyRun) {
+      const weights = companyRun.target_weights || {};
+      const rationale = companyRun.target_weight_rationale || {};
+      const entries = Object.entries(weights);
+      $("pgAllocationPill").textContent = entries.length ? `${entries.length} target(s)` : "No targets";
+      if (!entries.length) {
+        $("pgAllocation").innerHTML = `<div class="muted">No target allocation in the latest CEO run.</div>`;
+        return;
+      }
+      const maxWeight = Math.max(...entries.map(([, w]) => Number(w || 0)), 0.01);
+      $("pgAllocation").innerHTML = `<div class="allocation-list">${entries.map(([ticker, weight]) => {
+        const r = rationale[ticker] || {};
+        const width = Math.max(3, Number(weight || 0) / maxWeight * 100);
+        return `<div>
+          <div class="bar-row">
+            <strong>${safe(ticker)}</strong>
+            <div class="bar-shell"><div class="bar-fill" style="width:${width.toFixed(1)}%"></div></div>
+            <div class="num">${(Number(weight || 0) * 100).toFixed(1)}%</div>
+          </div>
+          <div class="sub">Quality ${Number(r.quality_score || 0).toFixed(2)} - ${safe((r.drivers || []).slice(0, 5).join(", ") || "no rationale")}</div>
+        </div>`;
+      }).join("")}</div>`;
+    }
+
+    function renderProjectGCandidates(companyRun) {
+      const rows = (companyRun.candidates || []).slice(0, 10).map(c => ({
+        ticker: c.ticker,
+        strategy: c.strategy,
+        status: c.strategy_promotion_status || "",
+        fit: Number(c.day_trade_fit_score || 0).toFixed(1),
+        score: Number(c.score || 0).toFixed(2),
+        risk: (c.risk_flags || []).join(", ") || "none"
+      }));
+      $("pgCandidates").innerHTML = table([
+        {key:"ticker", label:"Ticker"},
+        {key:"strategy", label:"Strategy"},
+        {key:"status", label:"Status"},
+        {key:"fit", label:"Fit", num:true},
+        {key:"score", label:"Score", num:true},
+        {key:"risk", label:"Risk"}
+      ], rows, "No CEO candidate list found yet.");
+    }
+
+    function renderProjectGSessions(sessions) {
+      $("pgCurvePill").textContent = sessions.length ? `${sessions.length} report(s)` : "No reports";
+      const points = sessions.map(s => Number(s.final_equity || 0)).filter(v => v > 0);
+      $("pgSparkline").innerHTML = sparkline(points);
+      $("pgSessionTable").innerHTML = table([
+        {key:"session_id", label:"Session"},
+        {key:"cycles", label:"Cycles", num:true},
+        {key:"final_equity", label:"Final Equity", num:true},
+        {key:"change", label:"Change", num:true},
+        {key:"flat", label:"Flat"}
+      ], sessions.slice(-8).reverse().map(s => ({
+        session_id: s.session_id,
+        cycles: s.cycles_completed,
+        final_equity: money(s.final_equity),
+        change: money(s.change),
+        flat: s.flat ? "yes" : "no"
+      })), "No final session reports found.");
+    }
+
+    function sparkline(points) {
+      if (!points.length) return `<div class="muted">No equity points yet.</div>`;
+      if (points.length === 1) points = [points[0], points[0]];
+      const min = Math.min(...points);
+      const max = Math.max(...points);
+      const span = Math.max(1, max - min);
+      const coords = points.map((p, i) => {
+        const x = 8 + i * (284 / Math.max(1, points.length - 1));
+        const y = 104 - ((p - min) / span) * 88;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ");
+      const color = points[points.length - 1] >= points[0] ? "#087443" : "#b42318";
+      return `<svg viewBox="0 0 300 120" preserveAspectRatio="none">
+        <line x1="8" y1="104" x2="292" y2="104" stroke="#d9e0ea" stroke-width="1"/>
+        <polyline points="${coords}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${coords.split(" ").pop().split(",")[0]}" cy="${coords.split(" ").pop().split(",")[1]}" r="4" fill="${color}"/>
+      </svg>`;
+    }
+
+    function renderProjectGActivity(events) {
+      $("pgActivity").innerHTML = events.slice(-60).reverse().map(e => {
+        const detail = e.detail || e.reason || e.action || "";
+        return `<div class="event"><div class="time">${safe(e.logged_at || e.timestamp || "")}</div><div class="name">${safe(e.event || "event")}</div><div class="detail">${safe(detail)}</div></div>`;
+      }).join("") || `<div class="body muted">No live events found yet.</div>`;
     }
 
     function renderStrategy(strategy) {
@@ -1075,6 +1391,40 @@ HTML = r"""<!doctype html>
       }
     }
 
+    async function projectgAction(path, body, label) {
+      $("projectgActionResult").textContent = `${label}...`;
+      try {
+        const data = await api(path, {method:"POST", body: JSON.stringify(body || {})});
+        $("projectgActionResult").textContent = data.message || "Done.";
+        await refresh();
+      } catch (err) {
+        $("projectgActionResult").textContent = err.message;
+      }
+    }
+
+    function projectgOptions(extra = {}) {
+      const numberOrNull = (id) => {
+        const raw = $(id).value;
+        return raw === "" ? null : Number(raw);
+      };
+      return {
+        strategy: $("pgBotStrategy").value,
+        research_profile: $("pgResearchProfile").value,
+        universe: $("pgUniverse").value,
+        interval_seconds: numberOrNull("pgInterval"),
+        max_cycles: numberOrNull("pgMaxCycles"),
+        max_deploy_usd: numberOrNull("pgMaxDeploy"),
+        max_order_notional_usd: numberOrNull("pgMaxOrder"),
+        target_positions: numberOrNull("pgTargets"),
+        alpaca_stock_feed: $("pgFeed").value,
+        news_enabled: $("pgNews").checked,
+        premarket_research_enabled: $("pgPremarket").checked,
+        with_staff_memo: $("pgStaffMemo").checked,
+        with_tech_scout: $("pgTechScout").checked,
+        ...extra
+      };
+    }
+
     function setupDepartments(departments) {
       $("departmentSelect").innerHTML = Object.entries(departments).map(([key, d]) => `<option value="${key}">${safe(d.name)} - ${safe(d.teaches)}</option>`).join("");
     }
@@ -1108,6 +1458,10 @@ HTML = r"""<!doctype html>
       }).join("");
     }
 
+    function setupProjectG(meta) {
+      $("pgUniverse").value = meta.default_projectg_universe || "";
+    }
+
     document.querySelectorAll(".tab").forEach(btn => {
       btn.addEventListener("click", () => {
         document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
@@ -1133,6 +1487,17 @@ HTML = r"""<!doctype html>
     $("stopFlattenBtn").addEventListener("click", () => action("/api/bot/stop", {action:"flatten", reason:"control room stop and flatten"}, "Writing flatten stop request"));
     $("stopOnlyBtn").addEventListener("click", () => action("/api/bot/stop", {action:"stop", reason:"control room stop only"}, "Writing stop request"));
     $("generateEvidenceBtn").addEventListener("click", () => action("/api/strategy/generate", {}, "Generating strategy evidence"));
+    $("pgPreflightBtn").addEventListener("click", () => projectgAction("/api/preflight", {}, "Running preflight"));
+    $("pgResearchBtn").addEventListener("click", () => projectgAction("/api/projectg/research", projectgOptions(), "Starting CEO research"));
+    $("pgEvidenceBtn").addEventListener("click", () => projectgAction("/api/strategy/generate", {}, "Generating evidence"));
+    $("pgStartBtn").addEventListener("click", () => {
+      if (confirm("Start the ProjectG paper bot with the flat-start safety gate?")) projectgAction("/api/bot/start", projectgOptions(), "Starting paper bot");
+    });
+    $("pgOnceBtn").addEventListener("click", () => projectgAction("/api/bot/start", projectgOptions({once:true}), "Starting one-cycle run"));
+    $("pgFlattenStartBtn").addEventListener("click", () => {
+      if (confirm("Ask ProjectG to flatten existing paper exposure before starting?")) projectgAction("/api/bot/start", projectgOptions({flatten_existing_at_start:true}), "Starting with flatten");
+    });
+    $("pgStopFlattenBtn").addEventListener("click", () => projectgAction("/api/bot/stop", {action:"flatten", reason:"ProjectG cockpit stop and flatten"}, "Writing stop + flatten request"));
 
     $("templateRiskBtn").addEventListener("click", () => {
       $("departmentSelect").value = "risk_office";
@@ -1174,6 +1539,7 @@ HTML = r"""<!doctype html>
       setupLearning();
       setupOrganagram(meta.org_flow);
       setupUniverse(meta.universe_groups);
+      setupProjectG(meta);
       await refresh();
       setInterval(refresh, 10000);
     })();
@@ -1198,6 +1564,7 @@ class ControlRoomHandler(BaseHTTPRequestHandler):
                         "departments": DEPARTMENTS,
                         "org_flow": ORG_FLOW,
                         "universe_groups": UNIVERSE_GROUPS,
+                        "default_projectg_universe": DEFAULT_PROJECTG_UNIVERSE,
                     }
                 )
             elif parsed.path == "/api/status":
@@ -1223,6 +1590,8 @@ class ControlRoomHandler(BaseHTTPRequestHandler):
                 self.send_json(stop_bot_endpoint(body))
             elif parsed.path == "/api/strategy/generate":
                 self.send_json(generate_strategy_endpoint())
+            elif parsed.path == "/api/projectg/research":
+                self.send_json(start_projectg_research_endpoint(body))
             elif parsed.path == "/api/department-task":
                 self.send_json(department_task_endpoint(body))
             else:
@@ -1301,6 +1670,7 @@ def build_status() -> dict[str, Any]:
         "alpaca": snapshot,
         "log": log_summary,
         "strategy": strategy_evidence_summary(),
+        "projectg": projectg_summary(snapshot=snapshot),
         "reports": list_reports(),
         "department_tasks": list_department_tasks(),
     }
@@ -1404,26 +1774,52 @@ def compact_event(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def bot_status() -> dict[str, Any]:
-    proc = APP_STATE.bot_process
+    return process_status(
+        proc=APP_STATE.bot_process,
+        started_at=APP_STATE.bot_started_at,
+        command=APP_STATE.bot_command,
+        idle_detail="No app-started bot process",
+        running_detail="App-started bot process",
+    )
+
+
+def research_status() -> dict[str, Any]:
+    return process_status(
+        proc=APP_STATE.research_process,
+        started_at=APP_STATE.research_started_at,
+        command=APP_STATE.research_command,
+        idle_detail="No app-started CEO research process",
+        running_detail="App-started CEO research process",
+    )
+
+
+def process_status(
+    *,
+    proc: subprocess.Popen[Any] | None,
+    started_at: str,
+    command: list[str] | None,
+    idle_detail: str,
+    running_detail: str,
+) -> dict[str, Any]:
     if proc is not None:
         code = proc.poll()
         if code is None:
             return {
                 "running": True,
                 "pid": proc.pid,
-                "started_at": APP_STATE.bot_started_at,
-                "command": APP_STATE.bot_command,
-                "detail": f"App-started process {proc.pid}",
+                "started_at": started_at,
+                "command": command,
+                "detail": f"{running_detail} {proc.pid}",
             }
         return {
             "running": False,
             "pid": proc.pid,
             "exit_code": code,
-            "started_at": APP_STATE.bot_started_at,
-            "command": APP_STATE.bot_command,
+            "started_at": started_at,
+            "command": command,
             "detail": f"Last app-started process exited with {code}",
         }
-    return {"running": False, "detail": "No app-started bot process"}
+    return {"running": False, "detail": idle_detail}
 
 
 def strategy_evidence_summary() -> dict[str, Any]:
@@ -1439,11 +1835,76 @@ def strategy_evidence_summary() -> dict[str, Any]:
     }
 
 
+def projectg_summary(*, snapshot: dict[str, Any]) -> dict[str, Any]:
+    sessions = session_report_summaries()
+    latest_change = sessions[-1]["change"] if sessions else 0.0
+    latest_company_run = latest_company_run_summary()
+    account = snapshot.get("account", {})
+    return {
+        "account_status": account.get("status", ""),
+        "current_equity": account.get("equity") or account.get("portfolio_value"),
+        "latest_session_change": latest_change,
+        "research_process": research_status(),
+        "latest_company_run": latest_company_run,
+        "sessions": sessions,
+    }
+
+
+def latest_company_run_summary() -> dict[str, Any]:
+    root = REPO_ROOT / "results" / "codex_ceo_company"
+    latest = latest_file_recursive(root, "company_run.json")
+    if latest is None:
+        return {}
+    payload = read_json_file(latest)
+    candidates = payload.get("candidates", [])
+    order_plans = payload.get("order_plans", [])
+    return {
+        "path": str(latest),
+        "artifact_dir": str(latest.parent),
+        "modified": datetime.fromtimestamp(latest.stat().st_mtime).isoformat(timespec="seconds"),
+        "trade_date": payload.get("trade_date", ""),
+        "ceo_decision_summary": payload.get("ceo_decision_summary", {}),
+        "target_weights": payload.get("target_weights", {}),
+        "target_weight_rationale": payload.get("target_weight_rationale", {}),
+        "order_plans": order_plans[:20] if isinstance(order_plans, list) else [],
+        "order_plan_diagnostics": payload.get("order_plan_diagnostics", [])[:20],
+        "agent_scorecards": payload.get("agent_scorecards", []),
+        "candidates": candidates[:15] if isinstance(candidates, list) else [],
+    }
+
+
+def session_report_summaries() -> list[dict[str, Any]]:
+    root = RESULTS_DIR / "session_reports"
+    if not root.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in sorted(root.glob("daytrader_*_final.json"), key=lambda p: p.stat().st_mtime):
+        payload = read_json_file(path)
+        session = payload.get("session", {}) if isinstance(payload, dict) else {}
+        initial = safe_float(session.get("initial_equity"))
+        final = safe_float(session.get("final_equity"))
+        rows.append(
+            {
+                "path": str(path),
+                "session_id": session.get("session_id", path.stem),
+                "started_at": session.get("started_at", ""),
+                "finished_at": session.get("finished_at", ""),
+                "cycles_completed": session.get("cycles_completed", 0),
+                "initial_equity": initial,
+                "final_equity": final,
+                "change": final - initial if initial > 0 else 0.0,
+                "flat": bool(payload.get("flat")),
+            }
+        )
+    return rows[-40:]
+
+
 def list_reports() -> list[dict[str, Any]]:
     candidates: list[tuple[str, Path]] = []
     for root, kind in [
         (RESULTS_DIR / "session_reports", "session"),
         (RESULTS_DIR / "day_summaries", "day summary"),
+        (REPO_ROOT / "results" / "codex_ceo_company", "CEO research"),
         (REPO_ROOT / "results" / "reports", "CEO/report"),
     ]:
         if root.exists():
@@ -1512,25 +1973,9 @@ def start_bot_endpoint(body: dict[str, Any]) -> dict[str, Any]:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = PROCESS_LOG_DIR / f"bot_{stamp}.out.log"
     err_path = PROCESS_LOG_DIR / f"bot_{stamp}.err.log"
-    command = [sys.executable, str(REPO_ROOT / "run_day_trader_bot.py")]
-    if body.get("once"):
-        command.append("--once")
-    if body.get("flatten_existing_at_start"):
-        command.append("--flatten-existing-at-start")
-    if body.get("allow_carry_risk"):
-        command.append("--allow-carry-risk")
-    if body.get("entry_cooldown_minutes"):
-        command.extend(["--entry-cooldown-minutes", str(int(body["entry_cooldown_minutes"]))])
+    command = build_bot_command(body)
 
-    out_handle = out_path.open("a", encoding="utf-8")
-    err_handle = err_path.open("a", encoding="utf-8")
-    proc = subprocess.Popen(
-        command,
-        cwd=REPO_ROOT,
-        stdout=out_handle,
-        stderr=err_handle,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
+    proc = start_background_process(command, out_path=out_path, err_path=err_path)
     APP_STATE.bot_process = proc
     APP_STATE.bot_started_at = datetime.now(UTC).isoformat()
     APP_STATE.bot_command = command
@@ -1542,6 +1987,125 @@ def start_bot_endpoint(body: dict[str, Any]) -> dict[str, Any]:
         "stdout": str(out_path),
         "stderr": str(err_path),
     }
+
+
+def start_projectg_research_endpoint(body: dict[str, Any]) -> dict[str, Any]:
+    proc = APP_STATE.research_process
+    if proc is not None and proc.poll() is None:
+        return {
+            "ok": False,
+            "error": f"CEO research already running as PID {proc.pid}",
+        }
+
+    PROCESS_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = PROCESS_LOG_DIR / f"ceo_research_{stamp}.out.log"
+    err_path = PROCESS_LOG_DIR / f"ceo_research_{stamp}.err.log"
+    command = build_projectg_research_command(body)
+    proc = start_background_process(command, out_path=out_path, err_path=err_path)
+    APP_STATE.research_process = proc
+    APP_STATE.research_started_at = datetime.now(UTC).isoformat()
+    APP_STATE.research_command = command
+    return {
+        "ok": True,
+        "message": f"CEO research started as PID {proc.pid}",
+        "pid": proc.pid,
+        "command": command,
+        "stdout": str(out_path),
+        "stderr": str(err_path),
+    }
+
+
+def start_background_process(
+    command: list[str],
+    *,
+    out_path: Path,
+    err_path: Path,
+) -> subprocess.Popen[Any]:
+    out_handle = out_path.open("a", encoding="utf-8")
+    err_handle = err_path.open("a", encoding="utf-8")
+    return subprocess.Popen(
+        command,
+        cwd=REPO_ROOT,
+        stdout=out_handle,
+        stderr=err_handle,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+
+
+def build_bot_command(body: dict[str, Any]) -> list[str]:
+    command = [sys.executable, str(REPO_ROOT / "run_day_trader_bot.py")]
+    strategy = str(body.get("strategy") or "both").strip().lower()
+    if strategy not in {"safe", "risky", "both"}:
+        strategy = "both"
+    command.extend(["--strategy", strategy])
+
+    universe = str(body.get("universe") or "").strip()
+    if universe:
+        command.extend(["--universe", universe])
+
+    append_int_arg(command, "--interval-seconds", body.get("interval_seconds"))
+    append_int_arg(command, "--max-cycles", body.get("max_cycles"))
+    append_float_arg(command, "--max-deploy-usd", body.get("max_deploy_usd"))
+    append_float_arg(command, "--max-order-notional-usd", body.get("max_order_notional_usd"))
+    append_int_arg(command, "--target-positions", body.get("target_positions"))
+
+    feed = str(body.get("alpaca_stock_feed") or "").strip().lower()
+    if feed:
+        command.extend(["--alpaca-stock-feed", feed])
+    if body.get("once"):
+        command.append("--once")
+    if body.get("flatten_existing_at_start"):
+        command.append("--flatten-existing-at-start")
+    if body.get("allow_carry_risk"):
+        command.append("--allow-carry-risk")
+    if body.get("with_staff_memo"):
+        command.append("--with-staff-memo")
+    if body.get("with_tech_scout"):
+        command.append("--with-tech-scout")
+    if body.get("news_enabled") is False:
+        command.append("--disable-news-politics")
+    if body.get("premarket_research_enabled") is False:
+        command.append("--disable-premarket-research")
+    if body.get("entry_cooldown_minutes"):
+        command.extend(["--entry-cooldown-minutes", str(int(body["entry_cooldown_minutes"]))])
+    return command
+
+
+def build_projectg_research_command(body: dict[str, Any]) -> list[str]:
+    command = [sys.executable, str(REPO_ROOT / "scripts" / "run_codex_ceo_company.py")]
+    profile = str(body.get("research_profile") or "safe").strip().lower()
+    if profile not in {"balanced", "safe", "risky"}:
+        profile = "safe"
+    command.extend(["--strategy-profile", profile])
+
+    universe = str(body.get("universe") or "").strip()
+    if universe:
+        command.extend(["--universe", universe])
+    append_float_arg(command, "--max-deploy-usd", body.get("max_deploy_usd"))
+    append_float_arg(command, "--max-order-notional-usd", body.get("max_order_notional_usd"))
+    append_int_arg(command, "--target-positions", body.get("target_positions"))
+    if not body.get("with_staff_memo"):
+        command.append("--no-ollama-staff")
+    if not body.get("with_tech_scout"):
+        command.append("--no-tech-scout")
+    return command
+
+
+def append_int_arg(command: list[str], flag: str, value: Any) -> None:
+    if value in (None, ""):
+        return
+    parsed = int(value)
+    if parsed > 0:
+        command.extend([flag, str(parsed)])
+
+
+def append_float_arg(command: list[str], flag: str, value: Any) -> None:
+    if value in (None, ""):
+        return
+    parsed = float(value)
+    if parsed > 0:
+        command.extend([flag, str(parsed)])
 
 
 def stop_bot_endpoint(body: dict[str, Any]) -> dict[str, Any]:
@@ -1827,6 +2391,15 @@ def latest_file(directory: Path, pattern: str) -> Path | None:
     return max(files, key=lambda path: path.stat().st_mtime)
 
 
+def latest_file_recursive(directory: Path, pattern: str) -> Path | None:
+    if not directory.exists():
+        return None
+    files = [path for path in directory.rglob(pattern) if path.is_file()]
+    if not files:
+        return None
+    return max(files, key=lambda path: path.stat().st_mtime)
+
+
 def file_info(path: Path) -> dict[str, Any]:
     stat = path.stat()
     return {
@@ -1843,6 +2416,13 @@ def read_json_file(path: Path) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def load_script_module(name: str, path: Path) -> Any:

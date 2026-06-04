@@ -10,6 +10,7 @@ from tradingagents.company import (
     parse_universe,
     profiles_from_choice,
 )
+from tradingagents.company.autonomous_ceo import render_final_session_markdown
 
 
 class FakeCEOBroker:
@@ -352,6 +353,50 @@ def test_autonomous_ceo_writes_final_session_report(tmp_path):
     assert json_path.exists()
     assert markdown_path.exists()
     assert "Flat for next session | yes" in markdown_path.read_text(encoding="utf-8")
+    assert "Exit And Cooldown Review" in markdown_path.read_text(encoding="utf-8")
+
+
+def test_final_session_report_renders_risk_exit_review():
+    markdown = render_final_session_markdown(
+        {
+            "session": {
+                "session_id": "daytrader_test",
+                "started_at": "2026-05-06T14:00:00+00:00",
+                "finished_at": "2026-05-06T14:30:00+00:00",
+                "cycles_completed": 2,
+                "initial_equity": 1000,
+                "final_equity": 996,
+                "flatten_result": {"event": "not_attempted"},
+                "risk_exit_events": [
+                    {
+                        "symbol": "AAA",
+                        "reason": "early_adverse_move",
+                        "submitted": True,
+                        "unrealized_pl": -4,
+                        "unrealized_plpc": -0.004,
+                        "held_minutes": 6.0,
+                        "cooldown_until": "2026-05-06T15:00:00+00:00",
+                    }
+                ],
+                "symbol_cooldowns": [
+                    {
+                        "symbol": "AAA",
+                        "cooldown_until": "2026-05-06T15:00:00+00:00",
+                        "reason": "blocked_by_early_adverse_move_cooldown",
+                    }
+                ],
+            },
+            "snapshot": {
+                "account": {"status": "ACTIVE", "portfolio_value": "996"},
+                "positions": [],
+                "open_orders": [],
+            },
+        }
+    )
+
+    assert "early_adverse_move" in markdown
+    assert "$-4.00" in markdown
+    assert "blocked_by_early_adverse_move_cooldown" in markdown
 
 
 def test_autonomous_ceo_recent_entry_cooldown_blocks_next_cycle_buy():

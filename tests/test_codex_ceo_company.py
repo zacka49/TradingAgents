@@ -190,6 +190,60 @@ def test_bracket_buy_order_quantities_are_whole_shares():
     assert plans[0].estimated_notional_usd == 201
 
 
+def test_expensive_bracket_target_lifts_to_one_share_when_risk_caps_allow():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_min_order_notional_usd": 10,
+            "portfolio_max_deploy_usd": 2000,
+            "max_order_notional_usd": 1500,
+            "use_bracket_orders": True,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=FakePLTRBroker(),
+    )
+    plans = runner.build_order_plans(
+        candidates=[_candidate("GS", 1054, 10)],
+        target_weights={"GS": 0.10},
+        account=runner.broker.get_account(),
+        positions=[],
+    )
+
+    assert len(plans) == 1
+    assert plans[0].ticker == "GS"
+    assert plans[0].quantity == 1
+    assert plans[0].estimated_notional_usd == 1054
+    assert runner._last_order_plan_diagnostics[0]["reason"] == (
+        "whole_share_bracket_lifted_to_minimum"
+    )
+
+
+def test_expensive_bracket_target_records_actionable_skip_when_caps_block_one_share():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_min_order_notional_usd": 10,
+            "portfolio_max_deploy_usd": 2000,
+            "max_order_notional_usd": 250,
+            "use_bracket_orders": True,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=FakePLTRBroker(),
+    )
+    plans = runner.build_order_plans(
+        candidates=[_candidate("GS", 1054, 10)],
+        target_weights={"GS": 0.10},
+        account=runner.broker.get_account(),
+        positions=[],
+    )
+
+    assert plans == []
+    diagnostic = runner._last_order_plan_diagnostics[0]
+    assert diagnostic["reason"] == "whole_share_bracket_requires_one_share"
+    assert diagnostic["latest_price"] == 1054
+    assert diagnostic["max_order_notional"] == 250
+
+
 def test_live_price_refresh_keeps_bracket_buy_quantities_whole_shares():
     broker = FakePLTRBroker()
     runner = CodexCEOCompanyRunner(
@@ -393,6 +447,36 @@ def test_target_weights_require_day_trade_fit_when_available():
 
     candidate.day_trade_fit_score = 4.5
     assert runner.build_target_weights([candidate]) == {"AAA": 0.25}
+
+
+def test_quality_weighting_allocates_more_to_stronger_candidate():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_target_positions": 2,
+            "portfolio_deploy_pct": 0.30,
+            "portfolio_max_position_weight": 0.25,
+            "portfolio_quality_weighting_enabled": True,
+            "day_trade_auto_strategies": ["momentum_breakout"],
+            "day_trade_min_strategy_confidence": 0.58,
+        },
+        broker=FakeBroker(),
+    )
+    strong = _candidate("AAA", 50, 12)
+    strong.day_trade_fit_score = 4.5
+    strong.backtest_return_pct = 18.0
+    strong.backtest_excess_pct = 9.0
+    weaker = _candidate("BBB", 25, 4)
+    weaker.day_trade_fit_score = 1.0
+    weaker.risk_flags = ["weak_latest_session"]
+
+    weights = runner.build_target_weights([weaker, strong])
+
+    assert list(weights) == ["AAA", "BBB"]
+    assert weights["AAA"] > weights["BBB"]
+    assert round(sum(weights.values()), 4) == 0.30
+    assert runner._last_target_weight_rationale["AAA"]["quality_score"] > (
+        runner._last_target_weight_rationale["BBB"]["quality_score"]
+    )
 
 
 def test_target_weights_require_strategy_research_promotion():
@@ -687,9 +771,45 @@ def test_news_politics_context_expands_and_boosts_candidates(monkeypatch):
     runner._apply_catalyst_context(candidate)
 
     assert expanded == ["SPY", "NVDA"]
+    assert runner._last_catalyst_context["ranked_research_queue"][0]["symbol"] == "NVDA"
     assert candidate.score == 2.0
     assert candidate.political_themes == ["ai_chips_datacenter"]
     assert candidate.news_headlines == ["AI chip policy puts NVDA in focus (TestWire)"]
+
+
+def test_ceo_decision_summary_explains_no_trade_after_order_diagnostics():
+    runner = CodexCEOCompanyRunner(
+        {
+            "portfolio_min_order_notional_usd": 10,
+            "portfolio_max_deploy_usd": 2000,
+            "max_order_notional_usd": 250,
+            "use_bracket_orders": True,
+            "ollama_staff_memo_enabled": False,
+            "results_dir": "unused",
+        },
+        broker=FakePLTRBroker(),
+    )
+    candidates = [_candidate("GS", 1054, 10)]
+    plans = runner.build_order_plans(
+        candidates=candidates,
+        target_weights={"GS": 0.10},
+        account=runner.broker.get_account(),
+        positions=[],
+    )
+    summary = runner.build_ceo_decision_summary(
+        candidates=candidates,
+        target_weights={"GS": 0.10},
+        order_plans=plans,
+        order_plan_diagnostics=runner._last_order_plan_diagnostics,
+        clock={"is_open": True},
+        submit=True,
+        ceo_approved=True,
+    )
+
+    assert summary.decision == "no_trade"
+    assert "whole_share_bracket_requires_one_share" in summary.reasons
+    assert "catalyst_research_not_run" in summary.reasons
+    assert summary.metrics["diagnostics"] == 1
 
 
 def test_strategy_doctrine_context_contains_tradeable_and_watch_only_rules():

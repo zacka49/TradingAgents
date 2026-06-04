@@ -179,6 +179,7 @@ DEFAULT_CONFIG = {
     "portfolio_target_positions": 5,
     "portfolio_deploy_pct": 0.60,
     "portfolio_max_position_weight": 0.20,
+    "portfolio_quality_weighting_enabled": True,
     "portfolio_max_deploy_usd": 1500.0,
     "portfolio_min_order_notional_usd": 25.0,
     "portfolio_liquidate_non_targets": False,

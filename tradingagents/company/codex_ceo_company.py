@@ -149,6 +149,15 @@ class CompanyRunResult:
     blocked_orders: int
 
 
+@dataclass
+class CEODecisionSummary:
+    decision: str
+    outcome: str
+    reasons: List[str]
+    next_actions: List[str]
+    metrics: Dict[str, Any] = field(default_factory=dict)
+
+
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -212,7 +221,12 @@ class CodexCEOCompanyRunner:
     ) -> None:
         self.config = apply_compute_policy(config)
         self.broker = broker or AlpacaPaperBroker()
-        self._last_catalyst_context: Dict[str, Any] = {}
+        self._last_catalyst_context: Dict[str, Any] = {
+            "enabled": bool(self.config.get("codex_ceo_news_political_scan_enabled", True)),
+            "status": "not_started",
+            "ranked_research_queue": [],
+        }
+        self._last_target_weight_rationale: Dict[str, Dict[str, Any]] = {}
         self._last_order_plan_diagnostics: List[Dict[str, Any]] = []
         self._last_strategy_research_report: StrategyResearchReport | None = None
 
@@ -347,8 +361,13 @@ class CodexCEOCompanyRunner:
         *,
         max_symbols: int,
     ) -> List[str]:
-        self._last_catalyst_context = {}
+        self._last_catalyst_context = {
+            "enabled": bool(self.config.get("codex_ceo_news_political_scan_enabled", True)),
+            "status": "not_started",
+            "ranked_research_queue": [],
+        }
         if not self.config.get("codex_ceo_news_political_scan_enabled", True):
+            self._last_catalyst_context["status"] = "disabled"
             return list(tickers)
 
         configured_max = int(
@@ -368,16 +387,86 @@ class CodexCEOCompanyRunner:
             if not self.config.get("codex_ceo_news_political_fallback_to_base", True):
                 raise
             self._last_catalyst_context = {
+                "enabled": True,
+                "status": "error",
                 "symbols": list(tickers),
                 "base_symbols": list(tickers),
                 "added_symbols": [],
+                "ranked_research_queue": [],
                 "errors": [f"{type(exc).__name__}: {exc}"],
             }
             return list(tickers)
 
-        self._last_catalyst_context = context
+        self._last_catalyst_context = self._normalize_catalyst_context(context)
         expanded = context.get("symbols") or list(tickers)
         return _clean_universe(expanded)
+
+    def _normalize_catalyst_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(context)
+        normalized["enabled"] = True
+        normalized["status"] = "complete"
+        queue = normalized.get("ranked_research_queue")
+        if isinstance(queue, list) and queue:
+            return normalized
+
+        research_by_symbol = normalized.get("day_trade_research_by_symbol")
+        if isinstance(research_by_symbol, dict) and research_by_symbol:
+            normalized["ranked_research_queue"] = sorted(
+                [
+                    item
+                    for item in research_by_symbol.values()
+                    if isinstance(item, dict)
+                ],
+                key=lambda item: (-_safe_float(item.get("score")), str(item.get("symbol", ""))),
+            )
+            return normalized
+
+        scores = normalized.get("scores")
+        if not isinstance(scores, dict) or not scores:
+            normalized["ranked_research_queue"] = []
+            return normalized
+
+        def values_by_symbol(key: str, symbol: str) -> List[str]:
+            values = normalized.get(key, {})
+            if not isinstance(values, dict):
+                return []
+            return [str(item) for item in values.get(symbol, []) if str(item)]
+
+        queue = []
+        for symbol, score in scores.items():
+            ticker = str(symbol).upper()
+            if _safe_float(score) <= 0 or not ticker:
+                continue
+            tags = values_by_symbol("catalyst_tags_by_symbol", ticker)
+            themes = values_by_symbol("themes_by_symbol", ticker)
+            risk_tags = values_by_symbol("risk_tags_by_symbol", ticker)
+            headlines = values_by_symbol("headlines_by_symbol", ticker)
+            direction = "unknown"
+            directions = normalized.get("directions_by_symbol", {})
+            if isinstance(directions, dict):
+                direction = str(directions.get(ticker) or "unknown")
+            action = "risk_review" if risk_tags else "confirm_at_open"
+            queue.append(
+                {
+                    "symbol": ticker,
+                    "score": round(_safe_float(score), 3),
+                    "action": action,
+                    "direction": direction,
+                    "catalyst_tags": tags,
+                    "themes": themes,
+                    "risk_tags": risk_tags,
+                    "headlines": headlines[:3],
+                    "thesis": (
+                        f"{ticker} has catalyst score {round(_safe_float(score), 3)}"
+                        f" from {', '.join(tags or themes) or 'news scan'}."
+                    ),
+                }
+            )
+        normalized["ranked_research_queue"] = sorted(
+            queue,
+            key=lambda item: (-_safe_float(item.get("score")), str(item.get("symbol", ""))),
+        )
+        return normalized
 
     def _apply_catalyst_context(self, candidate: MarketCandidate) -> None:
         context = self._last_catalyst_context or {}
@@ -1068,6 +1157,7 @@ class CodexCEOCompanyRunner:
         return int((datetime.now(timezone.utc) - parsed).total_seconds())
 
     def build_target_weights(self, candidates: Sequence[MarketCandidate]) -> Dict[str, float]:
+        self._last_target_weight_rationale = {}
         count = min(
             int(self.config.get("portfolio_target_positions", 5)),
             len(candidates),
@@ -1084,7 +1174,7 @@ class CodexCEOCompanyRunner:
         }
         min_confidence = float(self.config.get("day_trade_min_strategy_confidence", 0.58))
         min_fit_score = float(self.config.get("codex_ceo_day_trade_min_fit_score", 0.0))
-        selected = [
+        qualified = [
             candidate
             for candidate in candidates
             if candidate.auto_trade_allowed
@@ -1097,13 +1187,152 @@ class CodexCEOCompanyRunner:
                 candidate.backtest_passed
                 or not bool(self.config.get("backtest_lab_gate_targets", True))
             )
-        ][:count]
+        ]
+        if bool(self.config.get("portfolio_quality_weighting_enabled", False)):
+            scored = [
+                (candidate, *self._target_quality_score(candidate))
+                for candidate in qualified
+            ]
+            scored.sort(key=lambda item: (-item[1], item[0].ticker))
+            selected_scored = scored[:count]
+            selected = [item[0] for item in selected_scored]
+        else:
+            selected = qualified[:count]
+            selected_scored = [
+                (candidate, *self._target_quality_score(candidate))
+                for candidate in selected
+            ]
         if not selected:
             return {}
         max_weight = float(self.config.get("portfolio_max_position_weight", 0.20))
         deploy_pct = float(self.config.get("portfolio_deploy_pct", 0.60))
+        if bool(self.config.get("portfolio_quality_weighting_enabled", False)):
+            weights = self._quality_weighted_targets(
+                selected_scored,
+                deploy_pct=deploy_pct,
+                max_weight=max_weight,
+            )
+            self._last_target_weight_rationale = {
+                candidate.ticker: {
+                    "quality_score": round(quality, 3),
+                    "drivers": drivers,
+                    "target_weight": weights.get(candidate.ticker, 0.0),
+                }
+                for candidate, quality, drivers in selected_scored
+            }
+            return weights
         raw_weight = min(max_weight, deploy_pct / count)
-        return {candidate.ticker: round(raw_weight, 4) for candidate in selected}
+        weights = {candidate.ticker: round(raw_weight, 4) for candidate in selected}
+        self._last_target_weight_rationale = {
+            candidate.ticker: {
+                "quality_score": round(quality, 3),
+                "drivers": drivers,
+                "target_weight": weights.get(candidate.ticker, 0.0),
+            }
+            for candidate, quality, drivers in selected_scored
+        }
+        return weights
+
+    def _quality_weighted_targets(
+        self,
+        scored_candidates: Sequence[tuple[MarketCandidate, float, List[str]]],
+        *,
+        deploy_pct: float,
+        max_weight: float,
+    ) -> Dict[str, float]:
+        remaining = max(0.0, float(deploy_pct))
+        uncapped = {
+            candidate.ticker: max(0.01, float(quality))
+            for candidate, quality, _drivers in scored_candidates
+        }
+        weights: Dict[str, float] = {}
+        while uncapped and remaining > 0:
+            quality_sum = sum(uncapped.values())
+            if quality_sum <= 0:
+                equal = remaining / len(uncapped)
+                for ticker in list(uncapped):
+                    weights[ticker] = min(max_weight, equal)
+                break
+            capped_this_round = False
+            for ticker, quality in list(uncapped.items()):
+                proposed = remaining * quality / quality_sum
+                if proposed >= max_weight:
+                    weights[ticker] = round(max_weight, 4)
+                    remaining = max(0.0, remaining - max_weight)
+                    uncapped.pop(ticker, None)
+                    capped_this_round = True
+            if not capped_this_round:
+                for ticker, quality in uncapped.items():
+                    weights[ticker] = round(remaining * quality / quality_sum, 4)
+                break
+        return {
+            ticker: weight
+            for ticker, weight in weights.items()
+            if weight > 0
+        }
+
+    def _target_quality_score(self, candidate: MarketCandidate) -> tuple[float, List[str]]:
+        quality = max(0.1, _safe_float(candidate.score))
+        drivers = [f"score={candidate.score:.2f}"]
+
+        confidence_bonus = max(0.0, candidate.strategy_confidence) * 2.5
+        quality += confidence_bonus
+        drivers.append(f"confidence={candidate.strategy_confidence:.2f}")
+
+        if candidate.day_trade_fit_score > 0:
+            fit_bonus = min(3.0, candidate.day_trade_fit_score) * 0.4
+            quality += fit_bonus
+            drivers.append(f"fit={candidate.day_trade_fit_score:.1f}")
+
+        if candidate.backtest_passed:
+            quality += 0.5
+        else:
+            quality -= 2.0
+            drivers.append("weak_backtest")
+        if candidate.backtest_excess_pct > 0:
+            excess_bonus = min(2.0, candidate.backtest_excess_pct / 15.0)
+            quality += excess_bonus
+            drivers.append(f"excess={candidate.backtest_excess_pct:.1f}%")
+        if candidate.backtest_return_pct > 0:
+            return_bonus = min(2.0, candidate.backtest_return_pct / 25.0)
+            quality += return_bonus
+            drivers.append(f"return={candidate.backtest_return_pct:.1f}%")
+        if candidate.backtest_max_drawdown_pct > 0:
+            drawdown_penalty = min(2.0, candidate.backtest_max_drawdown_pct / 8.0)
+            quality -= drawdown_penalty
+            drivers.append(f"dd={candidate.backtest_max_drawdown_pct:.1f}%")
+
+        risk_penalty = len(candidate.risk_flags) * 0.75
+        if risk_penalty:
+            quality -= risk_penalty
+            drivers.append(f"risk_flags={len(candidate.risk_flags)}")
+
+        if candidate.strategy_promotion_status == "approved_paper_strategy":
+            quality += 1.0
+            drivers.append("approved_strategy")
+        elif candidate.strategy_promotion_status == "paper_trade_candidate":
+            quality += 0.4
+            drivers.append("paper_candidate")
+
+        if candidate.news_catalysts or candidate.news_headlines or candidate.catalyst_tags:
+            quality += 0.4
+            drivers.append("catalyst_context")
+        if candidate.catalyst_direction == "bullish":
+            quality += 0.5
+            drivers.append("bullish_catalyst")
+        elif candidate.catalyst_direction == "bearish":
+            quality -= 1.0
+            drivers.append("bearish_catalyst")
+
+        action = candidate.premarket_research_action
+        if action in {"priority_research", "confirm_at_open"}:
+            quality += 0.4
+            drivers.append(action)
+        elif action == "risk_review":
+            quality -= 1.0
+            drivers.append(action)
+
+        return max(0.01, round(quality, 4)), drivers
 
     def _strategy_research_report(self) -> StrategyResearchReport:
         if self._last_strategy_research_report is not None:
@@ -1200,11 +1429,15 @@ class CodexCEOCompanyRunner:
         open_buy_notional, open_sell_symbols = self._summarize_open_orders(open_orders or [])
         equity = _safe_float(account.get("equity"))
         buying_power = _safe_float(account.get("buying_power"))
+        buying_power_remaining = buying_power
         max_deploy = float(self.config.get("portfolio_max_deploy_usd", 1500.0))
         deploy_base = min(equity, max_deploy)
         min_order_notional = float(self.config.get("portfolio_min_order_notional_usd", 25.0))
         max_order_notional = float(self.config.get("max_order_notional_usd", 250.0))
         max_active_positions = int(self.config.get("portfolio_max_active_positions", 0))
+        allow_whole_share_lift = bool(
+            self.config.get("portfolio_allow_whole_share_min_notional_lift", True)
+        )
         blocked_new_buys = {
             str(symbol).upper()
             for symbol in self.config.get("day_trade_block_new_buys_symbols", [])
@@ -1222,6 +1455,11 @@ class CodexCEOCompanyRunner:
             for ticker, position in position_by_ticker.items()
             if abs(_safe_float(position.get("market_value"))) >= min_order_notional
         }
+        deployed_notional = sum(
+            abs(_safe_float(position.get("market_value")))
+            for position in position_by_ticker.values()
+        ) + sum(open_buy_notional.values())
+        planned_buy_notional = 0.0
 
         plans: List[PortfolioOrderPlan] = []
         for ticker, weight in target_weights.items():
@@ -1229,6 +1467,7 @@ class CodexCEOCompanyRunner:
             if candidate is None or candidate.latest_price <= 0:
                 self._record_order_plan_skip(ticker, "missing_candidate_or_price")
                 continue
+            remaining_deploy = max(0.0, deploy_base - deployed_notional - planned_buy_notional)
             target_notional = min(deploy_base * weight, max_order_notional)
             current_market_value = _safe_float(
                 position_by_ticker.get(ticker, {}).get("market_value")
@@ -1244,12 +1483,29 @@ class CodexCEOCompanyRunner:
                     min_order_notional=min_order_notional,
                 )
                 continue
-            if delta > 0 and delta > buying_power:
-                delta = buying_power
+            if delta > 0 and remaining_deploy < min_order_notional:
+                self._record_order_plan_skip(
+                    ticker,
+                    "deploy_cap_remaining_below_min_order",
+                    target_notional=round(target_notional, 2),
+                    current_market_value=round(current_market_value, 2),
+                    remaining_deploy=round(remaining_deploy, 2),
+                    deploy_base=round(deploy_base, 2),
+                    deployed_notional=round(deployed_notional, 2),
+                    planned_buy_notional=round(planned_buy_notional, 2),
+                    min_order_notional=min_order_notional,
+                )
+                continue
+            if delta > 0 and delta > remaining_deploy:
+                delta = remaining_deploy
+            if delta > 0 and delta > buying_power_remaining:
+                delta = buying_power_remaining
             if abs(delta) < min_order_notional:
                 self._record_order_plan_skip(
                     ticker,
                     "buying_power_adjusted_delta_below_min_order",
+                    target_notional=round(target_notional, 2),
+                    buying_power_remaining=round(buying_power_remaining, 2),
                     min_order_notional=min_order_notional,
                 )
                 continue
@@ -1286,14 +1542,36 @@ class CodexCEOCompanyRunner:
                 and candidate.take_profit_pct
                 and candidate.stop_loss_pct
             ):
+                raw_quantity = quantity
                 quantity = math.floor(quantity)
+                if quantity <= 0 and allow_whole_share_lift:
+                    one_share_notional = candidate.latest_price
+                    if (
+                        one_share_notional <= max_order_notional
+                        and one_share_notional <= buying_power_remaining
+                        and one_share_notional <= remaining_deploy
+                    ):
+                        quantity = 1
+                        self._record_order_plan_skip(
+                            ticker,
+                            "whole_share_bracket_lifted_to_minimum",
+                            original_target_notional=round(target_notional, 2),
+                            adjusted_notional=round(one_share_notional, 2),
+                            latest_price=round(candidate.latest_price, 4),
+                        )
                 delta = quantity * candidate.latest_price
-                if delta < min_order_notional:
+                if quantity <= 0 or delta < min_order_notional:
                     self._record_order_plan_skip(
                         ticker,
-                        "whole_share_bracket_notional_below_min_order",
+                        "whole_share_bracket_requires_one_share",
+                        target_notional=round(target_notional, 2),
                         estimated_notional_usd=round(delta, 2),
+                        raw_quantity=round(raw_quantity, 4),
+                        latest_price=round(candidate.latest_price, 4),
                         min_order_notional=min_order_notional,
+                        max_order_notional=max_order_notional,
+                        buying_power_remaining=round(buying_power_remaining, 2),
+                        remaining_deploy=round(remaining_deploy, 2),
                     )
                     continue
             if side == "sell":
@@ -1332,6 +1610,8 @@ class CodexCEOCompanyRunner:
             )
             if side == "buy":
                 active_symbols.add(ticker)
+                buying_power_remaining = max(0.0, buying_power_remaining - abs(delta))
+                planned_buy_notional += abs(delta)
 
         if self.config.get("day_trade_trim_stale_losers", False):
             stale_loss_pct = abs(float(self.config.get("day_trade_stale_loss_pct", 1.0))) / 100.0
@@ -1391,6 +1671,97 @@ class CodexCEOCompanyRunner:
                 )
 
         return plans
+
+    def build_ceo_decision_summary(
+        self,
+        *,
+        candidates: Sequence[MarketCandidate],
+        target_weights: Dict[str, float],
+        order_plans: Sequence[PortfolioOrderPlan],
+        order_plan_diagnostics: Sequence[Dict[str, Any]],
+        clock: Dict[str, Any],
+        submit: bool,
+        ceo_approved: bool,
+    ) -> CEODecisionSummary:
+        submitted = [order for order in order_plans if order.submitted]
+        blocked = [order for order in order_plans if order.blocked_reason]
+        ready = [order for order in order_plans if not order.submitted and not order.blocked_reason]
+        catalyst_context = self._last_catalyst_context or {}
+        catalyst_queue = catalyst_context.get("ranked_research_queue") or []
+        catalyst_errors = catalyst_context.get("errors") or []
+
+        metrics = {
+            "candidates": len(candidates),
+            "target_weights": len(target_weights),
+            "order_plans": len(order_plans),
+            "submitted_orders": len(submitted),
+            "blocked_orders": len(blocked),
+            "diagnostics": len(order_plan_diagnostics),
+            "catalyst_queue_items": len(catalyst_queue),
+            "catalyst_errors": len(catalyst_errors),
+            "market_open": bool(clock.get("is_open")),
+            "submit_requested": submit,
+            "ceo_approved": ceo_approved,
+        }
+        reasons: List[str] = []
+        next_actions: List[str] = []
+
+        if submitted:
+            decision = "trade"
+            outcome = f"{len(submitted)} paper order(s) submitted."
+        elif order_plans and blocked:
+            decision = "blocked_trade"
+            outcome = "Orders were planned but blocked by guardrails."
+            reasons.extend(sorted({str(order.blocked_reason) for order in blocked if order.blocked_reason}))
+        elif order_plans and ready:
+            decision = "ready_trade"
+            outcome = "Orders are ready but were not submitted in this run."
+            if not submit:
+                reasons.append("dry_run_submit_not_requested")
+            if self.config.get("ceo_approval_required", True) and not ceo_approved:
+                reasons.append("ceo_approval_required")
+        else:
+            decision = "no_trade"
+            outcome = "No executable paper orders were produced."
+
+        if not candidates:
+            reasons.append("no_market_candidates")
+            next_actions.append("Check market data availability and universe filters.")
+        elif not target_weights:
+            reasons.append("no_targets_passed_strategy_risk_gates")
+            next_actions.append("Review strategy gates, backtest gate, and risk flags.")
+        elif not order_plans and order_plan_diagnostics:
+            main_reasons = sorted(
+                {
+                    str(item.get("reason"))
+                    for item in order_plan_diagnostics
+                    if item.get("reason")
+                    and str(item.get("reason")) != "whole_share_bracket_lifted_to_minimum"
+                }
+            )
+            reasons.extend(main_reasons[:4])
+            next_actions.append("Inspect order sizing caps, minimum notional, and whole-share requirements.")
+
+        if catalyst_context.get("status") in {"disabled", "not_started"}:
+            reasons.append("catalyst_research_not_run")
+            next_actions.append("Run or enable the pre-open catalyst research queue before market open.")
+        elif catalyst_errors:
+            reasons.append("catalyst_research_errors")
+            next_actions.append("Review news/policy data-source errors before relying on catalyst scores.")
+        elif not catalyst_queue:
+            reasons.append("empty_catalyst_research_queue")
+            next_actions.append("Confirm the news scan produced articles and direct/theme ticker matches.")
+
+        if bool(clock.get("is_open")) is False and submit:
+            reasons.append("market_closed")
+
+        return CEODecisionSummary(
+            decision=decision,
+            outcome=outcome,
+            reasons=list(dict.fromkeys(reasons)),
+            next_actions=list(dict.fromkeys(next_actions)),
+            metrics=metrics,
+        )
 
     def _record_order_plan_skip(self, ticker: str, reason: str, **details: Any) -> None:
         self._last_order_plan_diagnostics.append(
@@ -1640,6 +2011,15 @@ class CodexCEOCompanyRunner:
             if self.config.get("strategy_research_enabled", True)
             else None
         )
+        ceo_decision_summary = self.build_ceo_decision_summary(
+            candidates=candidates,
+            target_weights=target_weights,
+            order_plans=order_plans,
+            order_plan_diagnostics=self._last_order_plan_diagnostics,
+            clock=clock,
+            submit=submit,
+            ceo_approved=ceo_approved,
+        )
         payload = {
             "trade_date": trade_date,
             "account": self._account_summary(account),
@@ -1649,8 +2029,10 @@ class CodexCEOCompanyRunner:
             "candidates": [asdict(candidate) for candidate in candidates],
             "catalyst_context": self._last_catalyst_context,
             "target_weights": target_weights,
+            "target_weight_rationale": dict(self._last_target_weight_rationale),
             "order_plans": [asdict(plan) for plan in order_plans],
             "order_plan_diagnostics": list(self._last_order_plan_diagnostics),
+            "ceo_decision_summary": asdict(ceo_decision_summary),
             "strategy_research_report": (
                 asdict(strategy_research_report) if strategy_research_report else {}
             ),
@@ -1681,6 +2063,7 @@ class CodexCEOCompanyRunner:
                 target_weights=target_weights,
                 order_plans=order_plans,
                 order_plan_diagnostics=self._last_order_plan_diagnostics,
+                ceo_decision_summary=ceo_decision_summary,
                 strategy_research_report=strategy_research_report,
                 agent_scorecards=scorecards,
                 specialist_memory_context=payload["specialist_memory_context"],
@@ -1714,6 +2097,7 @@ class CodexCEOCompanyRunner:
         target_weights: Dict[str, float],
         order_plans: Sequence[PortfolioOrderPlan],
         order_plan_diagnostics: Sequence[Dict[str, Any]],
+        ceo_decision_summary: CEODecisionSummary,
         strategy_research_report: StrategyResearchReport | None,
         agent_scorecards,
         specialist_memory_context: Dict[str, str],
@@ -1734,6 +2118,16 @@ class CodexCEOCompanyRunner:
             "",
             "## Current Positions",
         ]
+        lines.extend(
+            [
+                "",
+                "## CEO Decision Summary",
+                f"- Decision: {ceo_decision_summary.decision}",
+                f"- Outcome: {ceo_decision_summary.outcome}",
+                f"- Reasons: {', '.join(ceo_decision_summary.reasons) or 'none'}",
+                f"- Next actions: {'; '.join(ceo_decision_summary.next_actions) or 'none'}",
+            ]
+        )
         if positions:
             lines.extend(
                 [
@@ -1797,6 +2191,22 @@ class CodexCEOCompanyRunner:
                         note=_md_cell(strategy.note, max_len=150),
                     )
                 )
+
+        catalyst_context = self._last_catalyst_context or {}
+        lines.extend(
+            [
+                "",
+                "## Catalyst Research Status",
+                f"- Status: {catalyst_context.get('status', 'unknown')}",
+                f"- Articles scanned: {catalyst_context.get('article_count', 0)}",
+                f"- Added symbols: {', '.join(catalyst_context.get('added_symbols', [])[:12]) or 'none'}",
+                f"- Queue items: {len(catalyst_context.get('ranked_research_queue') or [])}",
+            ]
+        )
+        if catalyst_context.get("errors"):
+            lines.append(
+                f"- Errors: {'; '.join(str(item) for item in catalyst_context.get('errors', [])[:3])}"
+            )
 
         research_queue = list(
             (self._last_catalyst_context or {}).get("ranked_research_queue", [])
@@ -1942,9 +2352,19 @@ class CodexCEOCompanyRunner:
 
         lines.extend(["", "## Starter Portfolio Targets"])
         if target_weights:
-            lines.extend(["| Ticker | Target Weight |", "| --- | ---: |"])
+            lines.extend(
+                [
+                    "| Ticker | Target Weight | Quality | Drivers |",
+                    "| --- | ---: | ---: | --- |",
+                ]
+            )
             for ticker, weight in target_weights.items():
-                lines.append(f"| {ticker} | {weight:.1%} |")
+                rationale = self._last_target_weight_rationale.get(ticker, {})
+                drivers = ", ".join(rationale.get("drivers", [])[:6])
+                quality = _safe_float(rationale.get("quality_score"))
+                lines.append(
+                    f"| {ticker} | {weight:.1%} | {quality:.2f} | {_md_cell(drivers, max_len=180)} |"
+                )
         else:
             lines.append("No target weights produced.")
 

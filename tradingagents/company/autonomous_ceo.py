@@ -122,6 +122,7 @@ class AutonomousPaperCEOAgent:
         self.symbol_cooldowns: Dict[str, float] = {}
         self.symbol_cooldown_reasons: Dict[str, str] = {}
         self.last_flatten_result: Dict[str, Any] | None = None
+        self.risk_exit_events: List[Dict[str, Any]] = []
 
     def run(self, event_sink: EventSink | None = None) -> int:
         sink = event_sink or print_json_event
@@ -270,6 +271,7 @@ class AutonomousPaperCEOAgent:
             "positions": summarize_positions(snapshot.get("positions", [])),
             "open_orders": summarize_open_orders(snapshot.get("open_orders", [])),
             "symbol_cooldowns": self.active_cooldown_payload(),
+            "risk_exit_events": list(self.risk_exit_events),
             "clock": snapshot.get("clock", {}),
             "flatten_result": self.last_flatten_result
             or {"event": "not_attempted", "reason": "no_flatten_requested"},
@@ -969,6 +971,7 @@ class AutonomousPaperCEOAgent:
         risk_exits = self.apply_day_trader_exit_policy(positions, open_orders)
         if risk_exits:
             self.apply_risk_exit_cooldowns(risk_exits)
+            self.risk_exit_events.extend(dict(exit_event) for exit_event in risk_exits)
             event["risk_exits"] = risk_exits
         cooldowns = self.active_cooldown_payload()
         if cooldowns:
@@ -1614,6 +1617,8 @@ def render_final_session_markdown(report_payload: Dict[str, Any]) -> str:
     day_change = final_equity - initial_equity if initial_equity > 0 else 0.0
     flat = not positions and not open_orders
     flatten_result = session.get("flatten_result") or {}
+    risk_exit_events = list(session.get("risk_exit_events") or [])
+    symbol_cooldowns = list(session.get("symbol_cooldowns") or [])
 
     lines = [
         f"# Final Session Report - {session.get('session_id', 'unknown')}",
@@ -1696,6 +1701,46 @@ def render_final_session_markdown(report_payload: Dict[str, Any]) -> str:
             )
     else:
         lines.append("No open orders reported.")
+
+    lines.extend(["", "## Exit And Cooldown Review", ""])
+    if risk_exit_events:
+        lines.extend(
+            [
+                "| Symbol | Reason | Submitted | P/L | P/L % | Held Min | Cooldown Until |",
+                "| --- | --- | --- | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for event in risk_exit_events[:20]:
+            lines.append(
+                "| {symbol} | {reason} | {submitted} | {pl} | {plpc:.2%} | {held} | {cooldown} |".format(
+                    symbol=event.get("symbol", ""),
+                    reason=event.get("reason", ""),
+                    submitted=event.get("submitted", ""),
+                    pl=format_money(safe_float(event.get("unrealized_pl"))),
+                    plpc=safe_float(event.get("unrealized_plpc")),
+                    held=event.get("held_minutes", ""),
+                    cooldown=event.get("cooldown_until", ""),
+                )
+            )
+    else:
+        lines.append("No risk exits were recorded during the session.")
+
+    if symbol_cooldowns:
+        lines.extend(
+            [
+                "",
+                "| Cooldown Symbol | Until | Reason |",
+                "| --- | --- | --- |",
+            ]
+        )
+        for cooldown in symbol_cooldowns[:20]:
+            lines.append(
+                "| {symbol} | {until} | {reason} |".format(
+                    symbol=cooldown.get("symbol", ""),
+                    until=cooldown.get("cooldown_until", ""),
+                    reason=cooldown.get("reason", ""),
+                )
+            )
 
     if snapshot.get("errors"):
         lines.extend(["", "## Snapshot Errors", ""])

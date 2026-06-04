@@ -97,3 +97,58 @@ def test_compact_event_preserves_operational_detail():
     assert "account_not_flat_at_start" in event["detail"]
     assert "positions: 2" in event["detail"]
     assert "orders: 3" in event["detail"]
+
+
+def test_projectg_bot_command_includes_web_cockpit_options():
+    app = _load_app_module()
+
+    command = app.build_bot_command(
+        {
+            "strategy": "safe",
+            "universe": "AMD,NVDA,QQQ",
+            "interval_seconds": 15,
+            "max_cycles": 3,
+            "max_deploy_usd": 12000,
+            "max_order_notional_usd": 1500,
+            "target_positions": 2,
+            "alpaca_stock_feed": "iex",
+            "once": True,
+            "with_staff_memo": True,
+            "with_tech_scout": True,
+            "news_enabled": False,
+            "premarket_research_enabled": False,
+        }
+    )
+
+    assert str(app.REPO_ROOT / "run_day_trader_bot.py") in command
+    assert command[command.index("--strategy") + 1] == "safe"
+    assert command[command.index("--universe") + 1] == "AMD,NVDA,QQQ"
+    assert command[command.index("--max-cycles") + 1] == "3"
+    assert "--once" in command
+    assert "--with-staff-memo" in command
+    assert "--with-tech-scout" in command
+    assert "--disable-news-politics" in command
+    assert "--disable-premarket-research" in command
+
+
+def test_projectg_research_command_uses_ceo_runner_profile():
+    app = _load_app_module()
+
+    command = app.build_projectg_research_command(
+        {
+            "research_profile": "risky",
+            "universe": "PLTR,HOOD",
+            "max_deploy_usd": 25000,
+            "max_order_notional_usd": 2000,
+            "target_positions": 4,
+            "with_staff_memo": False,
+            "with_tech_scout": False,
+        }
+    )
+
+    assert str(app.REPO_ROOT / "scripts" / "run_codex_ceo_company.py") in command
+    assert command[command.index("--strategy-profile") + 1] == "risky"
+    assert command[command.index("--universe") + 1] == "PLTR,HOOD"
+    assert command[command.index("--target-positions") + 1] == "4"
+    assert "--no-ollama-staff" in command
+    assert "--no-tech-scout" in command

@@ -341,12 +341,24 @@ def _news_scorecard(
     gaps: List[str] = []
     actions: List[str] = []
     queue = _as_list(catalyst_context.get("ranked_research_queue"))
+    errors = _as_list(catalyst_context.get("errors"))
+    status = str(catalyst_context.get("status") or "unknown")
     if queue:
         signals.append(f"{len(queue)} catalyst research queue items")
         score += 20
     else:
-        gaps.append("No ranked catalyst research queue found")
-        actions.append("Run premarket catalyst research before market open")
+        if status in {"disabled", "not_started"}:
+            gaps.append("Catalyst research was not run")
+            actions.append("Enable the premarket catalyst queue before market open")
+        elif errors:
+            gaps.append("Catalyst research had data-source errors")
+            actions.append("Review news/policy fetch errors before the next open")
+        else:
+            gaps.append("No ranked catalyst research queue found")
+            actions.append("Run premarket catalyst research before market open")
+    if errors:
+        signals.append(f"{len(errors)} catalyst research errors recorded")
+        score -= 10
 
     tagged = [
         item
@@ -449,6 +461,7 @@ def _ceo_scorecard(payload: Dict[str, Any], orders: Sequence[Dict[str, Any]]) ->
     gaps: List[str] = []
     actions: List[str] = []
     account = _as_dict(payload.get("account"))
+    decision_summary = _as_dict(payload.get("ceo_decision_summary"))
     if str(account.get("status", "")).upper() == "ACTIVE":
         signals.append("Paper account active")
         score += 10
@@ -466,13 +479,19 @@ def _ceo_scorecard(payload: Dict[str, Any], orders: Sequence[Dict[str, Any]]) ->
         elif blocked:
             signals.append("Submission request resulted in blocked orders only")
             score += 10
+        elif decision_summary.get("decision") == "no_trade":
+            signals.append("Submission request resolved by explicit no-trade decision")
+            score += 5
         else:
             gaps.append("Submission requested but no order outcome was recorded")
     if not payload.get("ceo_approved") and submitted:
         gaps.append("Submitted orders without CEO approval flag")
         score -= 25
-    if not orders:
+    if not orders and decision_summary.get("decision") != "no_trade":
         actions.append("Review whether no-trade was intentional after the briefing")
+    for action in _as_list(decision_summary.get("next_actions")):
+        if action not in actions:
+            actions.append(str(action))
     return _card("CEO Agent", score, signals, gaps, actions)
 
 
