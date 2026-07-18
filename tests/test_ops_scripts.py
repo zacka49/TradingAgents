@@ -8,6 +8,7 @@ parts with real conditional behavior worth protecting.
 
 from __future__ import annotations
 
+import csv
 from datetime import date
 import json
 from pathlib import Path
@@ -20,11 +21,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "ops"))
 import opslib  # noqa: E402
 from check_ollama_health import check_ollama_health  # noqa: E402
 from digest import DigestInputs, build_daily_digest  # noqa: E402
+import fix_tickets  # noqa: E402
+import pnl_attribution  # noqa: E402
 import trading_session  # noqa: E402
 
 
 def _write_session(
-    results_dir: Path, session_id: str, *, initial_equity: float, final_equity: float
+    results_dir: Path,
+    session_id: str,
+    *,
+    initial_equity: float,
+    final_equity: float,
+    risk_exit_events: list | None = None,
 ) -> None:
     reports_dir = results_dir / "session_reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -36,7 +44,8 @@ def _write_session(
             "cycles_completed": 3,
             "positions_count": 2,
             "open_orders_count": 0,
-        }
+        },
+        "risk_exit_events": risk_exit_events or [],
     }
     (reports_dir / f"{session_id}_final.json").write_text(json.dumps(payload), encoding="utf-8")
 
@@ -403,3 +412,152 @@ class TestTradingSessionCommand:
         )
         assert report["status"] == "skipped"
         assert report["reason"] == "dry_run"
+
+
+@pytest.mark.unit
+class TestFixTickets:
+    def test_grade_c_is_not_ticketed(self, tmp_path):
+        # Regression: an off-by-one in the grade comparison once flagged a
+        # C-grade agent as a fix ticket. "Below C" must mean D or F only.
+        review = {"scorecards": [{"agent": "CEO Agent", "score": 75, "grade": "C", "gaps": []}]}
+        created = fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-20",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        assert created == []
+        assert fix_tickets.list_fix_tickets(str(tmp_path)) == []
+
+    def test_grade_d_creates_medium_severity_ticket(self, tmp_path):
+        review = {"scorecards": [{"agent": "Risk Officer", "score": 60, "grade": "D", "gaps": ["no data"]}]}
+        created = fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-20",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        assert len(created) == 1
+        assert created[0]["severity"] == "medium"
+
+    def test_grade_f_creates_high_severity_ticket(self, tmp_path):
+        review = {"scorecards": [{"agent": "News Analyst", "score": 20, "grade": "F", "gaps": ["broken"]}]}
+        created = fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-20",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        assert len(created) == 1
+        assert created[0]["severity"] == "high"
+
+    def test_recurring_issue_increments_occurrences_instead_of_duplicating(self, tmp_path):
+        review = {"scorecards": [{"agent": "Risk Officer", "score": 60, "grade": "D", "gaps": []}]}
+        fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-20",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-21",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        tickets = fix_tickets.list_fix_tickets(str(tmp_path))
+        assert len(tickets) == 1
+        assert tickets[0]["occurrences"] == 2
+        assert tickets[0]["trade_dates"] == ["2026-07-20", "2026-07-21"]
+
+    def test_run_error_creates_ticket(self, tmp_path):
+        created = fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-20",
+            post_market_review=None,
+            ceo_error="boom",
+            post_market_error=None,
+        )
+        assert len(created) == 1
+        assert created[0]["subject"] == "ceo_briefing_run"
+
+    def test_resolve_then_recurrence_reopens_ticket(self, tmp_path):
+        review = {"scorecards": [{"agent": "Risk Officer", "score": 60, "grade": "D", "gaps": []}]}
+        fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-20",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        tid = fix_tickets.list_fix_tickets(str(tmp_path))[0]["id"]
+        fix_tickets.resolve_fix_ticket(str(tmp_path), tid, note="fixed the data feed")
+        assert fix_tickets.list_fix_tickets(str(tmp_path), status="open") == []
+
+        fix_tickets.generate_fix_tickets(
+            ops_results_dir=str(tmp_path),
+            trade_date="2026-07-21",
+            post_market_review=review,
+            ceo_error=None,
+            post_market_error=None,
+        )
+        reopened = fix_tickets.list_fix_tickets(str(tmp_path), status="open")
+        assert len(reopened) == 1
+        assert reopened[0]["id"] == tid
+
+
+@pytest.mark.unit
+class TestPnlAttribution:
+    def test_appends_session_row_with_correct_pnl(self, tmp_path):
+        dt_dir = tmp_path / "dt"
+        _write_session(
+            dt_dir, "daytrader_20260720T140000Z", initial_equity=100000.0, final_equity=100250.0
+        )
+        added = pnl_attribution.append_session_pnl(
+            trade_date="2026-07-20", day_trader_results_dir=str(dt_dir), ops_results_dir=str(tmp_path / "ops")
+        )
+        assert added == 1
+        csv_path = tmp_path / "ops" / "pnl_attribution" / "sessions.csv"
+        with csv_path.open(encoding="utf-8") as handle:
+            row = list(csv.DictReader(handle))[0]
+        assert row["session_id"] == "daytrader_20260720T140000Z"
+        assert float(row["pnl_usd"]) == 250.0
+        assert float(row["pnl_pct"]) == 0.25
+
+    def test_rerun_does_not_duplicate_rows(self, tmp_path):
+        dt_dir = tmp_path / "dt"
+        _write_session(dt_dir, "daytrader_20260720T140000Z", initial_equity=100000, final_equity=100250)
+        ops_dir = tmp_path / "ops"
+        first = pnl_attribution.append_session_pnl(
+            trade_date="2026-07-20", day_trader_results_dir=str(dt_dir), ops_results_dir=str(ops_dir)
+        )
+        second = pnl_attribution.append_session_pnl(
+            trade_date="2026-07-20", day_trader_results_dir=str(dt_dir), ops_results_dir=str(ops_dir)
+        )
+        assert first == 1
+        assert second == 0
+
+    def test_exit_events_are_appended(self, tmp_path):
+        dt_dir = tmp_path / "dt"
+        _write_session(
+            dt_dir,
+            "daytrader_20260720T140000Z",
+            initial_equity=100000,
+            final_equity=100100,
+            risk_exit_events=[
+                {"symbol": "AAPL", "reason": "profit_giveback_exit", "unrealized_pl": 42.5, "unrealized_plpc": 0.02, "held_minutes": 30}
+            ],
+        )
+        added = pnl_attribution.append_exit_events(
+            trade_date="2026-07-20", day_trader_results_dir=str(dt_dir), ops_results_dir=str(tmp_path / "ops")
+        )
+        assert added == 1
+        csv_path = tmp_path / "ops" / "pnl_attribution" / "exit_events.csv"
+        rows = csv_path.read_text(encoding="utf-8").splitlines()
+        assert "AAPL" in rows[1]
+        assert "profit_giveback_exit" in rows[1]

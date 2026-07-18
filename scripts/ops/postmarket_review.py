@@ -20,7 +20,9 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from digest import build_daily_digest, gather_daily_digest_inputs, write_daily_digest  # noqa: E402
-from opslib import today_str, write_heartbeat  # noqa: E402
+from fix_tickets import generate_fix_tickets  # noqa: E402
+from opslib import read_heartbeat, today_str, write_heartbeat  # noqa: E402
+from pnl_attribution import run_pnl_attribution  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CEO_SCRIPT = REPO_ROOT / "scripts" / "run_codex_ceo_company.py"
@@ -69,7 +71,9 @@ def _merge_review_detail(post_market_review: dict) -> dict:
     return merged
 
 
-def run_postmarket_review(*, results_dir: str, trade_date: str) -> dict:
+def run_postmarket_review(
+    *, results_dir: str, day_trader_results_dir: str = "results/autonomous_day_trader", trade_date: str
+) -> dict:
     ceo_summary, ceo_error = _run_json_subprocess(
         [
             sys.executable,
@@ -94,13 +98,36 @@ def run_postmarket_review(*, results_dir: str, trade_date: str) -> dict:
     if post_market_review and not post_market_error:
         post_market_review = _merge_review_detail(post_market_review)
 
+    t1_heartbeat = read_heartbeat("T1_premarket", trade_date, results_dir)
+    t2_heartbeat = read_heartbeat("T2_trading_session", trade_date, results_dir)
+    t2_details = (t2_heartbeat or {}).get("details", {})
+
+    generate_fix_tickets(
+        ops_results_dir=results_dir,
+        trade_date=trade_date,
+        post_market_review=post_market_review,
+        ceo_error=ceo_error,
+        post_market_error=post_market_error,
+        t1_status=(t1_heartbeat or {}).get("status"),
+        t2_status=(t2_heartbeat or {}).get("status"),
+        t2_error_detail=t2_details.get("stderr_tail"),
+    )
+
+    pnl_report = run_pnl_attribution(
+        trade_date=trade_date,
+        day_trader_results_dir=day_trader_results_dir,
+        ops_results_dir=results_dir,
+    )
+
     inputs = gather_daily_digest_inputs(
         trade_date=trade_date,
         ops_results_dir=results_dir,
+        day_trader_results_dir=day_trader_results_dir,
         ceo_summary=ceo_summary,
         ceo_error=ceo_error,
         post_market_review=post_market_review,
         post_market_error=post_market_error,
+        pnl_attribution=pnl_report,
     )
     md_path, json_path = write_daily_digest(inputs, ops_results_dir=results_dir)
 
@@ -110,7 +137,11 @@ def run_postmarket_review(*, results_dir: str, trade_date: str) -> dict:
         status,
         trade_date=trade_date,
         results_dir=results_dir,
-        details={"ceo_error": ceo_error, "post_market_error": post_market_error},
+        details={
+            "ceo_error": ceo_error,
+            "post_market_error": post_market_error,
+            "open_fix_tickets": len(inputs.open_fix_tickets),
+        },
     )
 
     return {
@@ -120,12 +151,15 @@ def run_postmarket_review(*, results_dir: str, trade_date: str) -> dict:
         "digest_json": str(json_path),
         "ceo_error": ceo_error,
         "post_market_error": post_market_error,
+        "open_fix_tickets": len(inputs.open_fix_tickets),
+        "pnl_attribution": pnl_report,
     }
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="T3 post-market review and daily digest.")
     parser.add_argument("--results-dir", default="results/ops")
+    parser.add_argument("--day-trader-results-dir", default="results/autonomous_day_trader")
     parser.add_argument("--date", default=None)
     return parser
 
@@ -135,7 +169,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     trade_date = args.date or today_str()
 
-    report = run_postmarket_review(results_dir=args.results_dir, trade_date=trade_date)
+    report = run_postmarket_review(
+        results_dir=args.results_dir,
+        day_trader_results_dir=args.day_trader_results_dir,
+        trade_date=trade_date,
+    )
     print(json.dumps(report, indent=2))
     print(f"Digest written: {report['digest_markdown']}", file=sys.stderr)
     return 0 if report["status"] == "ok" else 1

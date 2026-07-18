@@ -13,6 +13,7 @@ import sys
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fix_tickets import list_fix_tickets  # noqa: E402
 from opslib import (  # noqa: E402
     list_day_trader_sessions_for_date,
     ops_root,
@@ -45,6 +46,8 @@ class DigestInputs:
     post_market_review: dict[str, Any] | None
     post_market_error: str | None
     strategy_library: dict[str, Any] = field(default_factory=dict)
+    open_fix_tickets: list[dict[str, Any]] = field(default_factory=list)
+    pnl_attribution: dict[str, Any] | None = None
 
 
 def gather_daily_digest_inputs(
@@ -56,6 +59,7 @@ def gather_daily_digest_inputs(
     ceo_error: str | None = None,
     post_market_review: dict[str, Any] | None = None,
     post_market_error: str | None = None,
+    pnl_attribution: dict[str, Any] | None = None,
 ) -> DigestInputs:
     ops_dir = ops_root(ops_results_dir)
     premarket = _read_json(ops_dir / "premarket" / f"{trade_date}.json")
@@ -70,6 +74,8 @@ def gather_daily_digest_inputs(
         post_market_review=post_market_review,
         post_market_error=post_market_error,
         strategy_library=strategy_library_freshness(),
+        open_fix_tickets=list_fix_tickets(ops_results_dir, status="open"),
+        pnl_attribution=pnl_attribution,
     )
 
 
@@ -114,6 +120,7 @@ def build_daily_digest(inputs: DigestInputs) -> str:
         + (f", average scorecard {avg_score}" if avg_score is not None else "")
     )
     lines.append(f"- Strategy library: {'STALE' if inputs.strategy_library.get('stale') else 'fresh'}")
+    lines.append(f"- Open fix tickets: {len(inputs.open_fix_tickets)}")
     lines.append("")
 
     if t1_status == "MISSING":
@@ -179,6 +186,32 @@ def build_daily_digest(inputs: DigestInputs) -> str:
                 attention.append(f"{card.get('agent')} scored {card.get('grade')} - {', '.join(gaps) or 'no detail'}")
     else:
         lines.append("- No scorecards available for this date.")
+    lines.append("")
+
+    # --- P&L attribution ---
+    if inputs.pnl_attribution:
+        lines.append("## P&L Attribution")
+        lines.append(
+            f"- Session rows added today: {inputs.pnl_attribution.get('session_rows_added', 0)}, "
+            f"exit-event rows added: {inputs.pnl_attribution.get('exit_event_rows_added', 0)}"
+        )
+        lines.append(f"- Rolling log: `{inputs.pnl_attribution.get('sessions_csv', '')}`")
+        lines.append("")
+
+    # --- Fix tickets ---
+    lines.append("## Open Fix Tickets")
+    if inputs.open_fix_tickets:
+        lines.append("| Severity | Subject | Occurrences | Summary |")
+        lines.append("| --- | --- | ---: | --- |")
+        for ticket in inputs.open_fix_tickets:
+            lines.append(
+                f"| {ticket.get('severity')} | {ticket.get('subject')} | "
+                f"{ticket.get('occurrences')} | {ticket.get('summary')} |"
+            )
+            if ticket.get("severity") == "high":
+                attention.append(f"Open high-severity ticket: {ticket.get('id')} - {ticket.get('summary')}")
+    else:
+        lines.append("- No open tickets.")
     lines.append("")
 
     # --- Attention needed ---
