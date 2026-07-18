@@ -7,7 +7,7 @@ import pandas as pd
 import yfinance as yf
 
 from tradingagents.dataflows.order_flow import get_alpaca_order_flow_snapshot
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import sanitize_ticker_component
 
 
 DEFAULT_AUTONOMOUS_UNIVERSE = [
@@ -154,7 +154,7 @@ def _clean_universe(universe: Iterable[str]) -> List[str]:
     seen: set[str] = set()
     cleaned: List[str] = []
     for item in universe:
-        ticker = safe_ticker_component(str(item).strip().upper())
+        ticker = sanitize_ticker_component(str(item).strip().upper())
         if ticker and ticker not in seen:
             seen.add(ticker)
             cleaned.append(ticker)

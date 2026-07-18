@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from tradingagents.agents.utils.market_scanner_tools import DEFAULT_DISCOVERY_UNIVERSE
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import sanitize_ticker_component
 
 try:
     import yfinance as yf
@@ -497,7 +497,7 @@ def _coerce_catalyst(
     if not headline or published is None:
         return None
     return NewsCatalyst(
-        ticker=safe_ticker_component(str(value.get("ticker") or symbol).upper()) or symbol,
+        ticker=sanitize_ticker_component(str(value.get("ticker") or symbol).upper()) or symbol,
         headline=headline,
         publisher=_clean_text(value.get("publisher") or "unknown"),
         published_at=published,
@@ -615,7 +615,7 @@ def _clean_universe(symbols: Iterable[str]) -> list[str]:
     seen: set[str] = set()
     cleaned: list[str] = []
     for item in symbols:
-        ticker = safe_ticker_component(str(item).strip().upper())
+        ticker = sanitize_ticker_component(str(item).strip().upper())
         if ticker and ticker not in seen:
             seen.add(ticker)
             cleaned.append(ticker)

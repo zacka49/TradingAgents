@@ -35,7 +35,7 @@
     },
     "decision": "blocked",
     "note": "Demoted by negative aggregate backtest evidence.",
-    "last_reviewed": "2026-06-04T09:38:48.383403+00:00"
+    "last_reviewed": "2026-07-18T18:41:31.668828+00:00"
   },
   {
     "strategy_id": "range_reversion_to_vwap",
@@ -73,6 +73,6 @@
     },
     "decision": "blocked",
     "note": "Demoted by negative aggregate backtest evidence.",
-    "last_reviewed": "2026-06-04T09:38:48.383416+00:00"
+    "last_reviewed": "2026-07-18T18:41:31.668840+00:00"
   }
 ]

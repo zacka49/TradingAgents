@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Sequence
 
 import yfinance as yf
 
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import sanitize_ticker_component
 
 
 DEFAULT_NEWS_POLITICS_QUERIES = [
@@ -297,7 +297,7 @@ def _clean_symbols(symbols: Iterable[str]) -> List[str]:
     seen: set[str] = set()
     cleaned: List[str] = []
     for item in symbols:
-        ticker = safe_ticker_component(str(item).strip().upper())
+        ticker = sanitize_ticker_component(str(item).strip().upper())
         if ticker and ticker not in seen:
             seen.add(ticker)
             cleaned.append(ticker)
@@ -516,7 +516,7 @@ def discover_news_politics_symbols(
                 if not any(keyword in lower_text for keyword in keywords):
                     continue
                 for symbol in theme.get("tickers", []):
-                    normalized = safe_ticker_component(str(symbol).upper())
+                    normalized = sanitize_ticker_component(str(symbol).upper())
                     if not normalized:
                         continue
                     scores[normalized] += 1 + min(catalyst_weight, 2)

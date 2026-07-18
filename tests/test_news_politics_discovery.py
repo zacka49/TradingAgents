@@ -90,3 +90,41 @@ def test_news_politics_discovery_falls_back_to_base_on_empty_news(monkeypatch):
 
     assert result["symbols"] == ["QQQ", "SPY"]
     assert result["added_symbols"] == []
+
+
+def test_futures_related_ticker_is_skipped_not_fatal(monkeypatch):
+    # Regression: Yahoo relatedTickers returning "CL=F" aborted the whole
+    # catalyst run with ValueError for a month (see July 2026 briefing packs).
+    articles = [
+        {
+            "relatedTickers": ["CL=F", "XOM"],
+            "content": {
+                "title": "Oil spikes as crude futures rally, XOM gains",
+                "summary": "Energy names moved with crude oil prices.",
+                "provider": {"displayName": "TestWire"},
+            },
+        }
+    ]
+
+    monkeypatch.setattr(
+        news_politics_discovery,
+        "_fetch_search_news",
+        lambda query, limit: articles,
+    )
+
+    result = news_politics_discovery.discover_news_politics_symbols(
+        ["XOM"],
+        queries=["oil test"],
+        max_symbols=20,
+        articles_per_query=1,
+    )
+
+    assert "CL=F" not in result["symbols"]
+    assert not result.get("errors")
+
+
+def test_clean_symbols_drops_invalid_and_keeps_valid():
+    cleaned = news_politics_discovery._clean_symbols(
+        ["aapl", "CL=F", "EURUSD=X", "MSFT", "AAPL"]
+    )
+    assert cleaned == ["AAPL", "MSFT"]

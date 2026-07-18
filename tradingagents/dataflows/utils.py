@@ -41,6 +41,22 @@ def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
     return value
 
 
+def sanitize_ticker_component(value: object, *, max_len: int = 32) -> str | None:
+    """Non-raising variant of :func:`safe_ticker_component` for ingestion paths.
+
+    External feeds legitimately emit symbols this business cannot use as path
+    components (e.g. Yahoo ``relatedTickers`` returning futures like
+    ``"CL=F"``). At those boundaries one bad symbol must be skipped, not abort
+    the whole research run. Returns the validated ticker, or ``None`` when the
+    value is invalid. Keep :func:`safe_ticker_component` for path construction
+    sites where an invalid value indicates a bug or attack.
+    """
+    try:
+        return safe_ticker_component(value, max_len=max_len)
+    except ValueError:
+        return None
+
+
 def save_output(data: pd.DataFrame, tag: str, save_path: SavePathType = None) -> None:
     if save_path:
         data.to_csv(save_path, encoding="utf-8")

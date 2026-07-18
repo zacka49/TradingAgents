@@ -38,7 +38,7 @@
     },
     "decision": "paper_trade_allowed",
     "note": "Positive but not strong enough for full approved status.",
-    "last_reviewed": "2026-06-04T09:38:48.383374+00:00"
+    "last_reviewed": "2026-07-18T18:41:31.668815+00:00"
   },
   {
     "strategy_id": "range_reversion_watch",
@@ -211,7 +211,7 @@
     },
     "decision": "research_only",
     "note": "Crypto evidence is not strong enough and execution support is incomplete.",
-    "last_reviewed": "2026-06-04T09:38:49.003422+00:00"
+    "last_reviewed": "2026-07-18T18:41:32.538839+00:00"
   },
   {
     "strategy_id": "news_reversion_event_study",
@@ -250,6 +250,6 @@
     },
     "decision": "research_only",
     "note": "Recent event study is negative; keep research-only.",
-    "last_reviewed": "2026-06-04T09:38:48.691849+00:00"
+    "last_reviewed": "2026-07-18T18:41:32.103972+00:00"
   }
 ]

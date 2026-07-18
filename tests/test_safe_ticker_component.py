@@ -5,7 +5,7 @@ import unittest
 
 import pytest
 
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import safe_ticker_component, sanitize_ticker_component
 
 
 @pytest.mark.unit
@@ -46,6 +46,19 @@ class TestSafeTickerComponent(unittest.TestCase):
         ticker = safe_ticker_component("AAPL")
         joined = os.path.realpath(os.path.join(base, f"{ticker}.csv"))
         self.assertTrue(joined.startswith(base + os.sep))
+
+
+@pytest.mark.unit
+class TestSanitizeTickerComponent(unittest.TestCase):
+    def test_returns_valid_tickers_unchanged(self):
+        for ticker in ("AAPL", "BRK-B", "BRK.A", "^GSPC"):
+            self.assertEqual(sanitize_ticker_component(ticker), ticker)
+
+    def test_returns_none_for_feed_symbols_unusable_as_paths(self):
+        # Yahoo relatedTickers can emit futures/FX symbols like these; they
+        # must be skipped by ingestion, never abort a research run.
+        for bad in ("CL=F", "GC=F", "EURUSD=X", "", None, "..", "a/b", "A" * 33):
+            self.assertIsNone(sanitize_ticker_component(bad))
 
 
 if __name__ == "__main__":

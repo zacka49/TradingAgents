@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-04T09:38:48.055853+00:00",
+  "generated_at": "2026-07-18T18:41:31.234412+00:00",
   "source_root": "results",
   "strategies": [
     {
@@ -41,7 +41,7 @@
       },
       "decision": "paper_trade_allowed",
       "note": "Promoted by intraday aggregate backtest evidence.",
-      "last_reviewed": "2026-06-04T09:38:48.383273+00:00"
+      "last_reviewed": "2026-07-18T18:41:31.668773+00:00"
     },
     {
       "strategy_id": "momentum_breakout",
@@ -82,7 +82,7 @@
       },
       "decision": "paper_trade_allowed",
       "note": "Promoted by intraday aggregate backtest evidence.",
-      "last_reviewed": "2026-06-04T09:38:48.383332+00:00"
+      "last_reviewed": "2026-07-18T18:41:31.668800+00:00"
     },
     {
       "strategy_id": "relative_strength_continuation",
@@ -123,7 +123,7 @@
       },
       "decision": "paper_trade_allowed",
       "note": "Positive but not strong enough for full approved status.",
-      "last_reviewed": "2026-06-04T09:38:48.383374+00:00"
+      "last_reviewed": "2026-07-18T18:41:31.668815+00:00"
     },
     {
       "strategy_id": "range_reversion_watch",
@@ -296,7 +296,7 @@
       },
       "decision": "research_only",
       "note": "Crypto evidence is not strong enough and execution support is incomplete.",
-      "last_reviewed": "2026-06-04T09:38:49.003422+00:00"
+      "last_reviewed": "2026-07-18T18:41:32.538839+00:00"
     },
     {
       "strategy_id": "news_reversion_event_study",
@@ -335,7 +335,7 @@
       },
       "decision": "research_only",
       "note": "Recent event study is negative; keep research-only.",
-      "last_reviewed": "2026-06-04T09:38:48.691849+00:00"
+      "last_reviewed": "2026-07-18T18:41:32.103972+00:00"
     },
     {
       "strategy_id": "vwap_reclaim",
@@ -373,7 +373,7 @@
       },
       "decision": "blocked",
       "note": "Demoted by negative aggregate backtest evidence.",
-      "last_reviewed": "2026-06-04T09:38:48.383403+00:00"
+      "last_reviewed": "2026-07-18T18:41:31.668828+00:00"
     },
     {
       "strategy_id": "range_reversion_to_vwap",
@@ -411,7 +411,7 @@
       },
       "decision": "blocked",
       "note": "Demoted by negative aggregate backtest evidence.",
-      "last_reviewed": "2026-06-04T09:38:48.383416+00:00"
+      "last_reviewed": "2026-07-18T18:41:31.668840+00:00"
     }
   ],
   "approved_strategy_ids": [

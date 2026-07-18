@@ -47,7 +47,7 @@ from tradingagents.dataflows.news_politics_discovery import (
     discover_news_politics_symbols,
 )
 from tradingagents.dataflows.order_flow import get_alpaca_order_flow_snapshot
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import sanitize_ticker_component
 from tradingagents.execution import AlpacaPaperBroker, OrderIntent, evaluate_order_policy
 from tradingagents.llm_clients.compute_policy import (
     apply_compute_policy,
@@ -194,7 +194,7 @@ def _clean_universe(universe: Iterable[str]) -> List[str]:
     seen: set[str] = set()
     cleaned: List[str] = []
     for item in universe:
-        ticker = safe_ticker_component(str(item).strip().upper())
+        ticker = sanitize_ticker_component(str(item).strip().upper())
         if ticker and ticker not in seen:
             seen.add(ticker)
             cleaned.append(ticker)
