@@ -20,8 +20,11 @@ import sys
 
 from dotenv import load_dotenv
 
-from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.llm_clients.compute_policy import (
+# DEFAULT_CONFIG reads quick/deep model overrides at import time.
+load_dotenv(".env", override=True)
+
+from tradingagents.default_config import DEFAULT_CONFIG  # noqa: E402
+from tradingagents.llm_clients.compute_policy import (  # noqa: E402
     LOCAL_OLLAMA_BASE_URL,
     list_local_ollama_models,
     ollama_base_url_from_config,

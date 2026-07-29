@@ -177,11 +177,28 @@ def _choose_local_model(
     installed = set(installed_models)
     current = str(current_model or "").strip()
 
+    # An explicitly configured local model is intentional. Preserve it when
+    # Ollama confirms it is installed; priorities are fallbacks, not overrides.
+    if (
+        allow_current_fallback
+        and current
+        and current in installed
+        and not is_cloud_ollama_model(current)
+    ):
+        return current
+
     for candidate in priority:
         if candidate in installed:
             return candidate
 
-    if allow_current_fallback and current and not is_cloud_ollama_model(current):
+    # If the Ollama probe itself failed, retain a safe local configuration
+    # rather than rewriting it based on an empty inventory.
+    if (
+        not installed
+        and allow_current_fallback
+        and current
+        and not is_cloud_ollama_model(current)
+    ):
         return current
 
     return "qwen3:0.6b"

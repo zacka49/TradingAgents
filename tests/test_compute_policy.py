@@ -51,7 +51,36 @@ def test_local_only_blocks_online_provider_and_chooses_installed_local_models():
 
 
 @pytest.mark.unit
-def test_allow_online_opt_in_preserves_hosted_provider():
+def test_local_only_preserves_explicit_installed_local_models():
+    config = {
+        "llm_provider": "ollama",
+        "backend_url": "http://localhost:11434/v1",
+        "ollama_base_url": "http://localhost:11434",
+        "quick_think_llm": "llama3.2:3b",
+        "deep_think_llm": "llama3.1:8b",
+        "llm_budget_mode": "local_only",
+        "allow_online_llm": False,
+        "ollama_model_probe_timeout_seconds": 0.1,
+    }
+
+    with patch(
+        "tradingagents.llm_clients.compute_policy.requests.get",
+        return_value=_ollama_tags(
+            "qwen3:4b-instruct",
+            "llama3.2:3b",
+            "llama3.1:8b",
+        ),
+    ):
+        guarded = apply_compute_policy(config)
+
+    assert guarded["quick_think_llm"] == "llama3.2:3b"
+    assert guarded["deep_think_llm"] == "llama3.1:8b"
+    assert guarded["compute_policy_report"]["reasons"] == []
+
+@pytest.mark.unit
+def test_allow_online_opt_in_preserves_hosted_provider(monkeypatch):
+    monkeypatch.setenv("TRADINGAGENTS_LLM_BUDGET_MODE", "allow_online")
+    monkeypatch.setenv("TRADINGAGENTS_ALLOW_ONLINE_LLM", "1")
     config = {
         "llm_provider": "groq",
         "backend_url": "https://api.groq.com/openai/v1",
