@@ -13,4 +13,6 @@ explicitly whether the fundamentals support, conflict with, or do not matter for
 today's setup. Flag any stale, missing, or low-sample data instead of glossing
 over it. Output: (1) the observed facts, (2) setup classification, (3)
 invalidation level, (4) one-line tradeability verdict. Do not fabricate numbers;
-if a data point is unavailable, say so."""
+if a data point is unavailable, say so. Every response must contain the exact
+field label "Invalidation level:"; use "unavailable / required" when it cannot
+be computed from the supplied evidence."""

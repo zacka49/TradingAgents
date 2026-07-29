@@ -312,14 +312,14 @@ The pattern combines every tool the operator has:
 
 ## 4. Order of operations (summary checklist)
 
-- [ ] A0 — inventory Ollama, choose & pull deep model
-- [ ] B1 — write persona Modelfiles from skill matrix
-- [ ] B2 — build `ta-*` models + rebuild script
-- [ ] B3 — wire role env vars in `.env`
+- [x] A0 — inventory Ollama, choose & pull deep model
+- [x] B1 — write persona Modelfiles from skill matrix
+- [x] B2 — build `ta-*` models + rebuild script
+- [x] B3 — wire role env vars in `.env`
 - [ ] B4 — smoke-test one full run; confirm debate diverges
-- [ ] E1 — persona eval harness + regression tests → **commit Phases B+E**
-- [ ] C1 — audit existing grounding
-- [ ] C2 — inject strategy-library context where missing → commit Phase C
+- [x] E1 — persona eval harness + regression tests → **commit Phases B+E**
+- [x] C1 — audit existing grounding
+- [x] C2 — inject strategy-library context where missing → commit Phase C
 - [ ] D — **only on operator go-ahead**, distill + LoRA the 1–2 weakest roles
 
 **Fastest path to value:** A0 → B1 → B2 → B3 → B4 delivers a fully specialized, differentiated agent roster with zero training and zero spend. Everything after is refinement.
@@ -329,3 +329,7 @@ The pattern combines every tool the operator has:
 ## 5. Execution log (executor appends here)
 
 <!-- Executor: after each task, append one line: date, task id, result, run_id/commit. -->
+- 2026-07-29 — Integration — Refreshed the strategy library (e6d4bfb), merged Claude Track A and Codex Track B into `main` (52d2714), wired all 26 role overrides in the ignored `.env`, and hardened `.env` import order plus evaluator model unloading (72516f1).
+- 2026-07-29 — Tests — Guarded config retained every `ta-*` role with zero fallbacks; targeted tests passed 15/15; full suite passed 264 tests plus 47 subtests.
+- 2026-07-29 — E1 — Current installed personas pass all 27 informational structural cases: screener 3/3 (`finalcheck_20260729_164239.json`), analyst+synth+risk 9/9 (`reeval_20260729_163154.json`), quant+bull+bear 9/9 (`schema_20260729_164841.json`), decider+coach 6/6 (`final_dc_20260729_165311.json`).
+- 2026-07-29 — B4 attempted — The combined graph built and all role models resolved, but NVDA propagation ran for about 34 minutes and ended without a run artifact or final decision. B4 remains open as a local-runtime performance issue; no order submission was enabled.
