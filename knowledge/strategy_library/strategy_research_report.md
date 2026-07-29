@@ -1,6 +1,6 @@
 # Strategy Research Department Report
 
-- Generated: 2026-07-18T18:54:37.085628+00:00
+- Generated: 2026-07-29T14:39:30.369463+00:00
 - Evidence root: results
 - Approved paper strategies: opening_range_breakout_15m, momentum_breakout
 - Paper trade candidates: relative_strength_continuation

@@ -38,7 +38,7 @@
     },
     "decision": "paper_trade_allowed",
     "note": "Promoted by intraday aggregate backtest evidence.",
-    "last_reviewed": "2026-07-18T18:54:37.507149+00:00"
+    "last_reviewed": "2026-07-29T14:39:30.939202+00:00"
   },
   {
     "strategy_id": "momentum_breakout",
@@ -79,6 +79,6 @@
     },
     "decision": "paper_trade_allowed",
     "note": "Promoted by intraday aggregate backtest evidence.",
-    "last_reviewed": "2026-07-18T18:54:37.507178+00:00"
+    "last_reviewed": "2026-07-29T14:39:30.939229+00:00"
   }
 ]
