@@ -8,6 +8,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_news,
     get_stock_data,
 )
+from tradingagents.agents.utils.strategy_grounding import get_strategy_library_context
 
 
 def create_strategy_researcher(llm):
@@ -15,6 +16,10 @@ def create_strategy_researcher(llm):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
         tools = [get_stock_data, get_indicators, get_news]
+        strategy_library_context = get_strategy_library_context(
+            state,
+            role="strategy_researcher",
+        )
 
         system_message = (
             "You are the Strategy Researcher in an AI trading research department. "
@@ -47,7 +52,8 @@ def create_strategy_researcher(llm):
                     "Use the provided tools to progress toward the research deliverable. "
                     "You have access to the following tools: {tool_names}.\n"
                     "{system_message}\nFor your reference, the current date is "
-                    "{current_date}. {instrument_context}\n\n{context}",
+                    "{current_date}. {instrument_context}\n\n{context}"
+                    "{strategy_library_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -58,6 +64,9 @@ def create_strategy_researcher(llm):
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
         prompt = prompt.partial(context=context)
+        prompt = prompt.partial(
+            strategy_library_context=strategy_library_context
+        )
 
         chain = prompt | llm.bind_tools(tools)
         result = chain.invoke(state["messages"])
