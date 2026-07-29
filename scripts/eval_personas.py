@@ -527,6 +527,7 @@ def _generate(
     model: str,
     prompt: str,
     timeout_seconds: int,
+    keep_alive: int | str,
 ) -> str:
     response = requests.post(
         f"{base_url.rstrip('/')}/api/generate",
@@ -534,6 +535,9 @@ def _generate(
             "model": model,
             "prompt": prompt,
             "stream": False,
+            # Unload at persona boundaries so sequential models do not compete
+            # for constrained local GPU memory.
+            "keep_alive": keep_alive,
             "options": {
                 "temperature": 0.1,
                 "num_ctx": 4096,
@@ -554,14 +558,18 @@ def run_cases(
     timeout_seconds: int,
 ) -> list[EvalResult]:
     results: list[EvalResult] = []
-    for case in cases:
+    for index, case in enumerate(cases):
         started = time.perf_counter()
+        unload_after_case = (
+            index == len(cases) - 1 or cases[index + 1].model != case.model
+        )
         try:
             response = _generate(
                 base_url=base_url,
                 model=case.model,
                 prompt=case.prompt,
                 timeout_seconds=timeout_seconds,
+                keep_alive=0 if unload_after_case else "5m",
             )
             passed, missing = evaluate_response(case, response)
             results.append(
