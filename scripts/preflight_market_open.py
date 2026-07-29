@@ -10,9 +10,12 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.execution import AlpacaPaperBroker
-from tradingagents.llm_clients import apply_compute_policy
+# DEFAULT_CONFIG reads role-model overrides at import time.
+load_dotenv(".env", override=True)
+
+from tradingagents.default_config import DEFAULT_CONFIG  # noqa: E402
+from tradingagents.execution import AlpacaPaperBroker  # noqa: E402
+from tradingagents.llm_clients import apply_compute_policy  # noqa: E402
 
 
 REQUIRED_ENV = [
