@@ -36,12 +36,15 @@ git worktree add ../TA-claude  -b spec/track-a-personas
 git worktree add ../TA-codex   -b spec/track-b-evals
 
 # Give each its own venv + editable install so imports resolve to that worktree.
-cd ../TA-claude; python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e . --no-deps; deactivate
-cd ../TA-codex;  python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -e . --no-deps; deactivate
+# NOTE: the bare `python` on this machine is a stale 3.7 Store shim; the project
+# needs >=3.10. Pin to 3.13 (what the main .venv uses) via the py launcher.
+# Fresh venvs have no deps yet, so this is a FULL editable install (not --no-deps).
+cd ../TA-claude; py -3.13 -m venv .venv; .\.venv\Scripts\python.exe -m pip install -e .
+cd ../TA-codex;  py -3.13 -m venv .venv; .\.venv\Scripts\python.exe -m pip install -e .
 ```
 
 - Run **Claude Code in `../TA-claude`** and **Codex in `../TA-codex`**, each in its own terminal.
-- Copy your working `.env` (Alpaca keys etc.) into **both** worktree roots — `.env` is git-ignored, so it won't merge and won't leak.
+- Copy your working `.env` (Alpaca keys etc.) into **both** worktree roots — `.env` is git-ignored, so it won't merge and won't leak. (`cp ../TradingAgents/.env ./.env` from each worktree.)
 - Ollama is a machine-level daemon, so **both worktrees see the same models** — that's exactly what we want: Claude builds the `ta-*` models, they immediately exist for Codex/integration.
 
 > If you'd rather not use worktrees: run both agents in the **same** folder but enforce the file-ownership table in §1 strictly, and expect messier git history. Worktrees are strongly recommended.
