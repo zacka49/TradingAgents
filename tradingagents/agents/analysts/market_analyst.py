@@ -7,6 +7,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_live_order_flow_snapshot,
     get_stock_data,
 )
+from tradingagents.agents.utils.strategy_grounding import get_strategy_library_context
 from tradingagents.dataflows.config import get_config
 
 
@@ -16,6 +17,10 @@ def create_market_analyst(llm):
         current_date = state["trade_date"]
         instrument_context = build_instrument_context(state["company_of_interest"])
         stock_discovery_report = state.get("stock_discovery_report", "")
+        strategy_library_context = get_strategy_library_context(
+            state,
+            role="market_analyst",
+        )
 
         tools = [
             get_stock_data,
@@ -69,7 +74,8 @@ Live Order Flow:
                     " You have access to the following tools: {tool_names}.\n{system_message}"
                     "For your reference, the current date is {current_date}. "
                     "{instrument_context}\n\nPre-market stock discovery brief:\n"
-                    "{stock_discovery_report}{training_context}",
+                    "{stock_discovery_report}{training_context}"
+                    "{strategy_library_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -81,6 +87,9 @@ Live Order Flow:
         prompt = prompt.partial(instrument_context=instrument_context)
         prompt = prompt.partial(stock_discovery_report=stock_discovery_report)
         prompt = prompt.partial(training_context=build_training_context(state))
+        prompt = prompt.partial(
+            strategy_library_context=strategy_library_context
+        )
 
         chain = prompt | llm.bind_tools(tools)
 
